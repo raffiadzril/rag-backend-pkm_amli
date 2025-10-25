@@ -1,0 +1,34 @@
+[
+    {
+        "Usia":"6-8 bulan",
+        "Kebutuhan Jumlah Energi dari MP-ASI (per hari)":"200 kkal",
+        "Konsistensi \/ Tekstur":"Mulai dengan bubur kental, makanan lumat",
+        "Frekuensi (per hari)":"Utama: 2-3x Selingan: 1-2x",
+        "Jumlah Setiap Kali Makan":"Mulai dengan 2-3 sendok makan setiap kali makan, tingkatkan bertahap hingga \u00bd mangkok berukuran 250 ml (125 ml)",
+        "Variasi":"Konsumsi 5 dari 8 kelompok makanan"
+    },
+    {
+        "Usia":"9-11 bulan",
+        "Kebutuhan Jumlah Energi dari MP-ASI (per hari)":"300 kkal",
+        "Konsistensi \/ Tekstur":"Makanan yang dicincang halus dan makanan yang dapat dipegang bayi",
+        "Frekuensi (per hari)":"Utama: 3-4x Selingan: 1-2x",
+        "Jumlah Setiap Kali Makan":"\u00bd - \u00be mangkok ukuran 250 ml (125 \u2013 200 ml)",
+        "Variasi":"Konsumsi 5 dari 8 kelompok makanan"
+    },
+    {
+        "Usia":"12-23 bulan",
+        "Kebutuhan Jumlah Energi dari MP-ASI (per hari)":"550 kkal",
+        "Konsistensi \/ Tekstur":"Makanan keluarga",
+        "Frekuensi (per hari)":"Utama: 3-4x Selingan: 1-2x",
+        "Jumlah Setiap Kali Makan":"\u00be - 1 mangkok ukuran 250 ml",
+        "Variasi":"Konsumsi 5 dari 8 kelompok makanan"
+    },
+    {
+        "Usia":"Jika tidak mendapat ASI (6-23 bulan)",
+        "Kebutuhan Jumlah Energi dari MP-ASI (per hari)":"Jumlah kalori sesuai dengan kelompok usia",
+        "Konsistensi \/ Tekstur":"Konsistensi\/tekstur sesuai dengan kelompok usia",
+        "Frekuensi (per hari)":"Frekuensi sesuai dengan kelompok usia dengan Tambahan 1-2x makanan utama dan 1-2x makanan selingan",
+        "Jumlah Setiap Kali Makan":"Jumlah setiap kali makan sesuai dengan kelompok umur, dengan penambahan 1-2 gelas susu per hari @250 ml dan 2-3 kali cairan (air putih, kuah sayur, dll)",
+        "Variasi":"Konsumsi 5 dari 8 kelompok makanan"
+    }
+]
