@@ -20,12 +20,15 @@ def menu_plan(
     """
     rag = get_rag_service()
     allergy_list = [a.strip() for a in allergies.split(",")] if allergies else []
-    result_text = rag.generate_menu(
-        age_months=age_months,
-        weight_kg=weight_kg,
-        height_cm=height_cm,
-        residence=residence,
-        allergies=allergy_list,
-    )
-
-    return {"result": result_text}
+    
+    user_input = {
+        "age_months": age_months,
+        "weight_kg": weight_kg or 7.0,
+        "height_cm": height_cm or 65.0,
+        "residence": residence or "Indonesia",
+        "allergies": allergy_list,
+    }
+    
+    result = rag.generate_menu_plan(user_input)
+    
+    return result
