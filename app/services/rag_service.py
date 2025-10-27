@@ -22,13 +22,14 @@ class RAGService:
         self.load_all_datasets()
     
     def load_all_datasets(self):
-        """Load semua file JSON dari folder dataset"""
+        """Load semua file JSON dan Markdown dari folder dataset"""
         if not self.dataset_dir.exists():
             print(f"Folder {self.dataset_dir} tidak ditemukan")
             return
         
+        # Load JSON files
         json_files = list(self.dataset_dir.glob("*.json"))
-        print(f"Menemukan {len(json_files)} file dataset")
+        print(f"Menemukan {len(json_files)} file JSON")
         
         for json_file in json_files:
             try:
@@ -38,12 +39,61 @@ class RAGService:
                         self.data.extend(data)
                     else:
                         self.data.append(data)
-                print(f"✓ Loaded: {json_file.name} ({len(data)} items)")
+                print(f"✓ Loaded JSON: {json_file.name} ({len(data)} items)")
             except Exception as e:
                 print(f"✗ Error loading {json_file.name}: {e}")
         
+        # Load Markdown files
+        md_files = list(self.dataset_dir.glob("*.md"))
+        print(f"Menemukan {len(md_files)} file Markdown")
+        
+        for md_file in md_files:
+            try:
+                with open(md_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    # Split markdown into sections based on headers
+                    sections = self._parse_markdown(content, md_file.name)
+                    self.data.extend(sections)
+                print(f"✓ Loaded MD: {md_file.name} ({len(sections)} sections)")
+            except Exception as e:
+                print(f"✗ Error loading {md_file.name}: {e}")
+        
         print(f"\nTotal data loaded: {len(self.data)} items")
         self.create_embeddings()
+    
+    def _parse_markdown(self, content: str, filename: str):
+        """Parse markdown content into structured sections"""
+        sections = []
+        lines = content.split('\n')
+        current_section = {"source_file": filename, "content": ""}
+        current_header = ""
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Detect headers (# Header)
+            if line.startswith('#'):
+                # Save previous section if it has content
+                if current_section["content"].strip():
+                    current_section["header"] = current_header
+                    sections.append(current_section)
+                
+                # Start new section
+                current_header = line.lstrip('#').strip()
+                current_section = {
+                    "source_file": filename,
+                    "header": current_header,
+                    "content": line + "\n"
+                }
+            else:
+                current_section["content"] += line + "\n"
+        
+        # Add last section
+        if current_section["content"].strip():
+            current_section["header"] = current_header
+            sections.append(current_section)
+        
+        return sections
     
     def create_embeddings(self):
         """Buat embeddings untuk semua data"""
@@ -58,6 +108,14 @@ class RAGService:
     
     def item_to_text(self, item):
         """Convert data item menjadi text untuk RAG"""
+        # Handle markdown content
+        if "content" in item and "source_file" in item:
+            header = item.get("header", "")
+            content = item.get("content", "")
+            source = item.get("source_file", "")
+            return f"[{source}] {header}\n{content}".strip()
+        
+        # Handle JSON data
         text_parts = []
         for key, value in item.items():
             if value is not None and value != "" and key != "":
@@ -122,29 +180,36 @@ class RAGService:
         allergies = user_input.get('allergies', [])
         residence = user_input.get('residence', 'Indonesia')
         
+        # Query yang lebih comprehensive untuk RAG
         query_parts = [
             f"MPASI bayi {age_months} bulan",
-            f"berat badan {weight_kg} kg",
-            "menu makanan bayi",
+            f"usia {age_months} bulan",
             "angka kecukupan gizi",
-            "aturan MPASI"
+            "AKG",
+            "aturan MPASI",
+            "menu makanan bayi",
+            "tekstur makanan",
+            "porsi makan",
+            "frekuensi makan",
         ]
         
         if allergies:
-            query_parts.append(f"tidak boleh {', '.join(allergies)}")
+            query_parts.append(f"alergi {', '.join(allergies)}")
         
         query = " ".join(query_parts)
         
-        relevant_docs = self.search_relevant_docs(query, top_k=10)
+        # Cari dokumen relevan dengan jumlah lebih banyak untuk konteks maksimal
+        relevant_docs = self.search_relevant_docs(query, top_k=20)
         
         if not relevant_docs:
-            relevant_docs = self.search_relevant_docs("MPASI menu bayi", top_k=10)
+            relevant_docs = self.search_relevant_docs("MPASI menu bayi", top_k=20)
         
-        context = "\n\n".join([f"Data {i+1}:\n{doc}" for i, doc in enumerate(relevant_docs)])
+        # Format context dengan lebih terstruktur
+        context = "\n\n".join([f"=== REFERENSI {i+1} ===\n{doc}" for i, doc in enumerate(relevant_docs)])
         
-        allergies_text = f"\n- PENTING: Hindari bahan yang mengandung {', '.join(allergies)}" if allergies else ""
+        allergies_text = f"\n- PENTING: WAJIB hindari semua bahan yang mengandung {', '.join(allergies)}" if allergies else ""
         
-        prompt = f"""Kamu adalah ahli gizi dan dokter anak yang berpengalaman dalam MPASI (Makanan Pendamping ASI).
+        prompt = f"""Kamu adalah sistem AI yang HANYA menggunakan data yang diberikan untuk membuat rencana menu MPASI.
 
 INFORMASI BAYI:
 - Usia: {age_months} bulan
@@ -155,20 +220,35 @@ INFORMASI BAYI:
 DATA REFERENSI GIZI DAN ATURAN MPASI:
 {context}
 
+ATURAN STRICT (WAJIB DIIKUTI):
+1. HANYA gunakan bahan makanan yang ADA di data TKPI-2020 di atas
+2. HANYA gunakan aturan MPASI yang ADA di data referensi di atas
+3. HANYA gunakan nilai AKG yang ADA di data referensi di atas
+4. Kandungan gizi HARUS dihitung berdasarkan data TKPI-2020, TIDAK boleh perkiraan
+5. Tekstur, porsi, dan frekuensi HARUS sesuai dengan data referensi untuk usia {age_months} bulan
+6. JANGAN tambahkan informasi dari pengetahuan umum jika tidak ada di data referensi
+7. Jika data tidak mencukupi, tambahkan di "notes" bahwa informasi terbatas
+
+LARANGAN:
+❌ DILARANG menggunakan bahan makanan yang tidak ada di TKPI-2020
+❌ DILARANG membuat angka gizi tanpa acuan dari TKPI-2020
+❌ DILARANG menambahkan aturan yang tidak ada di data referensi
+❌ DILARANG menggunakan pengetahuan di luar data yang diberikan
+
 TUGAS:
-Buatkan rencana menu MPASI untuk 1 hari yang LENGKAP dan SESUAI dengan:
-1. Usia bayi dan kebutuhan gizi berdasarkan data AKG (Angka Kecukupan Gizi)
-2. Aturan MPASI yang benar
-3. Tekstur makanan yang sesuai usia
-4. Variasi nutrisi seimbang
-5. Hindari alergi yang disebutkan
+Buatkan rencana menu MPASI untuk 1 hari BERDASARKAN DATA REFERENSI SAJA:
+1. Cari nilai AKG untuk usia {age_months} bulan dari data referensi
+2. Cari aturan MPASI (tekstur, porsi, frekuensi) untuk usia {age_months} bulan dari data referensi
+3. Pilih bahan makanan HANYA dari TKPI-2020
+4. Hitung kandungan gizi menggunakan data TKPI-2020
+5. Pastikan total gizi memenuhi AKG dari data referensi
 
 PENTING: Response HARUS dalam format JSON yang valid seperti ini:
 {{
   "breakfast": {{
     "time": "06:00-07:00",
     "menu_name": "nama menu",
-    "ingredients": ["bahan 1", "bahan 2", "bahan 3"],
+    "ingredients": ["bahan 1 (kode TKPI jika ada)", "bahan 2", "bahan 3"],
     "portion": "porsi dalam ml atau gram",
     "instructions": "cara membuat singkat",
     "nutrition": {{
@@ -230,24 +310,48 @@ PENTING: Response HARUS dalam format JSON yang valid seperti ini:
       "fat_g": 5
     }}
   }},
+  "daily_summary": {{
+    "total_energy_kcal": 480,
+    "total_protein_g": 26,
+    "total_carbs_g": 68,
+    "total_fat_g": 16,
+    "akg_compliance": "Memenuhi/Kurang/Melebihi AKG berdasarkan data referensi",
+    "akg_reference": "AKG untuk usia {age_months} bulan dari data: [nilai dari data]"
+  }},
   "notes": [
-    "Catatan keamanan 1",
-    "Catatan keamanan 2",
-    "Tips nutrisi"
+    "Semua bahan menggunakan TKPI-2020: [sebutkan kode TKPI]",
+    "Tekstur sesuai usia {age_months} bulan dari data referensi",
+    "Jika ada keterbatasan data, sebutkan di sini"
   ],
   "recommendations": [
-    "Rekomendasi 1",
-    "Rekomendasi 2"
+    "Rekomendasi HANYA berdasarkan data referensi",
+    "Variasi bahan dari TKPI-2020 untuk hari berikutnya"
+  ],
+  "data_sources_used": [
+    "TKPI-2020: [kode-kode bahan yang digunakan]",
+    "AKG: [kelompok usia yang digunakan]",
+    "Aturan MPASI: [aturan spesifik yang diikuti]"
   ]
 }}
 
-RESPONSE HANYA JSON, TIDAK ADA TEXT LAIN!"""
+PENTING: 
+- Jika bahan tidak ada di TKPI-2020, JANGAN gunakan
+- Jika aturan tidak ada di data referensi, JANGAN buat sendiri
+- Sebutkan kode TKPI untuk setiap bahan (contoh: AR001 untuk beras)
+- Cantumkan sumber data yang digunakan di "data_sources_used"
+- SEMUA NILAI NUTRISI HARUS ANGKA BULAT atau DESIMAL, BUKAN RUMUS MATEMATIKA
+- Contoh BENAR: "energy_kcal": 150
+- Contoh SALAH: "energy_kcal": 134 + 50 (ini akan error!)
+- Hitung semua nilai terlebih dahulu, lalu masukkan hasilnya sebagai angka
+
+RESPONSE HANYA JSON VALID, TIDAK ADA TEXT LAIN!"""
 
         try:
             response = self.model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    temperature=0.3,  # Lebih rendah untuk lebih strict mengikuti data
                 )
             )
             
@@ -263,6 +367,10 @@ RESPONSE HANYA JSON, TIDAK ADA TEXT LAIN!"""
                     "height_cm": height_cm,
                     "residence": residence,
                     "allergies": allergies
+                },
+                "rag_info": {
+                    "documents_retrieved": len(relevant_docs),
+                    "query_used": query
                 }
             }
         except json.JSONDecodeError as e:
