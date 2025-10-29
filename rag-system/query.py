@@ -36,7 +36,7 @@ except Exception as e:
 api_key = os.getenv("GOOGLE_API_KEY") # Use GOOGLE_API_KEY as primary name
 gemini_model = None
 # Use gemini-2.5-pro for stable performance
-gemini_model_name = 'gemini-2.5-pro'
+gemini_model_name = 'gemini-2.5-flash'
 
 if api_key:
     try:
@@ -56,8 +56,8 @@ else:
 tkpi_file_ref = None # Global variable to store the file reference
 
 def find_existing_tkpi_file():
-    """Check Google API for an existing file named TKPI-2020.json."""
-    tkpi_filename = "TKPI-2020.json" # Extract filename
+    """Check Google API for an existing file named TKPI_COMPACT.txt"""
+    tkpi_filename = "TKPI_COMPACT.txt" # Extract filename
     print(f"[INFO] Checking Google API for existing file: {tkpi_filename}")
     try:
         # List all uploaded files
@@ -74,7 +74,7 @@ def find_existing_tkpi_file():
         return None
 
 def upload_tkpi_to_gemini():
-    """Upload TKPI-2020.json file to Gemini File API and waits for state 2 (assumed ACTIVE).
+    """Upload TKPI_COMPACT.txt file to Gemini File API and waits for state 2 (assumed ACTIVE).
     Checks first if a file reference already exists and is in state 2.
     Also checks the Google API for an existing file with the same name."""
     global tkpi_file_ref # <--- MOVED HERE: Declare global at the very beginning of the function
@@ -86,7 +86,7 @@ def upload_tkpi_to_gemini():
         print("[SUCCESS] TKPI file already uploaded (in variable) and ready (state 2) - skipping upload.")
         return True # Indicate success, no need to re-upload
 
-    # Check the Google API for an existing file with the name TKPI-2020.json
+    # Check the Google API for an existing file with the name TKPI_COMPACT.txt
     existing_file_info = find_existing_tkpi_file()
     if existing_file_info:
         # If found, check its state
@@ -103,7 +103,7 @@ def upload_tkpi_to_gemini():
     # If not found or not ready, proceed with upload
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        tkpi_file_path = os.path.abspath(os.path.join(script_dir, "../dataset/TKPI-2020.json"))
+        tkpi_file_path = os.path.abspath(os.path.join(script_dir, "../dataset/TKPI_COMPACT.txt"))
 
         if not os.path.exists(tkpi_file_path):
             print(f"[WARNING] TKPI file not found at {tkpi_file_path}")
@@ -328,7 +328,7 @@ KONTEKS ATURAN MPASI DAN AKG (WAJIB DIIKUTI):
 TUGAS ANDA: BUAT RENCANA MENU MPASI ORIGINAL UNTUK 1 HARI
 ==============================================
 
-[!] PERHATIAN PENTING: FILE TKPI-2020.json TELAH DILAMPIRKAN. WAJIB GUNAKAN HANYA DATA DARI FILE INI!
+[!] PERHATIAN PENTING: FILE TKPI_COMPACT.txt TELAH DILAMPIRKAN. WAJIB GUNAKAN HANYA DATA DARI FILE INI!
 
 WAJIB OUTPUT SEBAGAI JSON YANG VALID! Tidak boleh ada text lain selain JSON.
 
@@ -336,9 +336,9 @@ FORMAT JSON YANG HARUS DIOUTPUT (COPY STRUKTUR INI PERSIS):
 {json_example}
 
 INSTRUKSI WAJIB:
-1. [!] GUNAKAN HANYA BAHAN DARI FILE TKPI-2020.json YANG DILAMPIRKAN - JANGAN MENGGUNAKAN BAHAN LAIN
+1. [!] GUNAKAN HANYA BAHAN DARI FILE TKPI_COMPACT.txt YANG DILAMPIRKAN - JANGAN MENGGUNAKAN BAHAN LAIN
 2. [!] SETIAP BAHAN HARUS MEMILIKI KODE TKPI (KODE) YANG VALID DARI FILE
-3. [!] AMBIL NILAI NUTRISI HANYA DARI FILE TKPI-2020.json - JANGAN ESTIMASI ATAU MENGARANG
+3. [!] AMBIL NILAI NUTRISI HANYA DARI FILE TKPI_COMPACT.txt - JANGAN ESTIMASI ATAU MENGARANG
 4. [!] FORMAT INGREDIENTS: [{{"nama":"nama bahan exact dari TKPI","kode_tkpi":"KODE exact","jumlah":"gram/ml"}}]
 5. [+] Buat menu ORIGINAL dan UNIK dengan kombinasi bahan dari TKPI
 6. [+] Gunakan bahan yang sesuai untuk usia {age_months} bulan
@@ -350,10 +350,10 @@ INSTRUKSI WAJIB:
 12. [+] Setiap field HARUS ada, tidak boleh ada field yang kosong
 
 [!] PERINGATAN PENTING:
-- SEMUA KODE_TKPI HARUS SAMA DENGAN KODE DI FILE TKPI-2020.json (contoh: AR001, AR002, etc)
-- Jika ada bahan yang tidak ditemukan di file TKPI-2020.json, JANGAN gunakan bahan itu
-- Jika tidak yakin nilai nutrisi atau kode, cek di file TKPI-2020.json
-- Semua keputusan menu HARUS berdasarkan data di file TKPI-2020.json yang dilampirkan"""
+- SEMUA KODE_TKPI HARUS SAMA DENGAN KODE DI FILE TKPI_COMPACT.txt (contoh: AR001, AR002, etc)
+- Jika ada bahan yang tidak ditemukan di file TKPI_COMPACT.txt, JANGAN gunakan bahan itu
+- Jika tidak yakin nilai nutrisi atau kode, cek di file TKPI_COMPACT.txt
+- Semua keputusan menu HARUS berdasarkan data di file TKPI_COMPACT.txt yang dilampirkan"""
 
         print("[INFO] STEP 3: Generating menu plan with Gemini API using ChromaDB context and TKPI file (state 2)...")
         try:
@@ -370,7 +370,7 @@ INSTRUKSI WAJIB:
             print("  [INFO] Calling Gemini API generate_content... (with JSON mode)")
             # Attempt the API call with JSON mode
             response = self.gemini_model.generate_content(
-                [prompt],
+                [prompt, tkpi_file_ref],
                 generation_config=genai.GenerationConfig(
                     response_mime_type="application/json",
                     temperature=0.3,
