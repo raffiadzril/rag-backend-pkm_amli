@@ -173,6 +173,21 @@ class ChromaRAGService:
 
         print(f"[DEBUG] USING MODEL FOR GENERATION: {self.gemini_model.model_name}")
 
+        # Extract and validate parameters
+        umur_bulan = user_input.get('umur_bulan', user_input.get('age_months', 6))  # Support both formats
+        berat_badan = user_input.get('berat_badan', user_input.get('weight_kg', 7))
+        tinggi_badan = user_input.get('tinggi_badan', user_input.get('height_cm', 65))
+        jenis_kelamin = user_input.get('jenis_kelamin', 'laki-laki')  # Default to 'laki-laki' if not provided
+        tempat_tinggal = user_input.get('tempat_tinggal', user_input.get('residence', 'Indonesia'))
+        alergi = user_input.get('alergi', user_input.get('allergies', []))
+
+        # Validate age range for MPASI (6-24 months)
+        if umur_bulan < 6 or umur_bulan > 24:
+            return {
+                "status": "error", 
+                "message": f"MPASI hanya dianjurkan untuk bayi usia 6-24 bulan. Usia yang dimasukkan: {umur_bulan} bulan."
+            }
+
         global tkpi_file_ref
 
         # DEBUG: Print TKPI file reference status BEFORE the check
@@ -198,12 +213,22 @@ class ChromaRAGService:
         
 
         # STEP 1: Retrieve Rules/AGK from ChromaDB (Context for generation)
-        age_months = user_input.get('age_months', 6)
-        allergies = user_input.get('allergies', [])
+        age_months = umur_bulan
+        allergies = alergi
 
-        # Example of rules retrieval (you can optimize this)
-        rules_query = f"Aturan MPASI dan AKG angka kecukupan gizi untuk usia {age_months} bulan tekstur porsi frekuensi"
-        konteks_aturan = self.search_relevant_docs(rules_query, top_k=10) # Retrieve rules/AGK
+        # Include baby's information in the context query for more targeted information retrieval
+        context_query_parts = [
+            f"Aturan MPASI dan AKG angka kecukupan gizi untuk usia {age_months} bulan tekstur porsi frekuensi",
+            f"MPASI untuk bayi {jenis_kelamin}",
+            f"MPASI untuk bayi dengan berat badan {berat_badan} kg",
+            f"MPASI untuk bayi dengan tinggi badan {tinggi_badan} cm"
+        ]
+        if tempat_tinggal:
+            context_query_parts.append(f"MPASI lokal di {tempat_tinggal}")
+        
+        context_query = " ".join(context_query_parts)
+        
+        konteks_aturan = self.search_relevant_docs(context_query, top_k=10) # Retrieve rules/AGK
 
                 # === STEP 2: Prepare Prompt (REVERTED TO ORIGINAL STRING-BASED INGREDIENTS) ===
         formatted_aturan = "\n\n---\n".join(konteks_aturan)
@@ -265,59 +290,60 @@ class ChromaRAGService:
         # Build prompt using the ORIGINAL format (string-based ingredients)
         prompt = f"""Kamu adalah AI perencana menu MPASI bayi yang SANGAT TELITI dan KREATIF.
 
-                INFORMASI BAYI:
-                - Usia: {age_months} bulan
-                - Berat Badan: {user_input.get('weight_kg', 'N/A')} kg
-                - Tinggi Badan: {user_input.get('height_cm', 'N/A')} cm
-                - Tempat Tinggal: {user_input.get('residence', 'Indonesia')}{allergies_text}
+INFORMASI BAYI:
+- Usia: {age_months} bulan
+- Berat Badan: {berat_badan} kg
+- Tinggi Badan: {tinggi_badan} cm
+- Jenis Kelamin: {jenis_kelamin}
+- Tempat Tinggal: {tempat_tinggal}{allergies_text}
 
-                ==============================================
-                KONTEKS ATURAN MPASI DAN AKG (WAJIB DIIKUTI DARI CHROMA DB)
-                ==============================================
-                {formatted_aturan}
+==============================================
+KONTEKS ATURAN MPASI DAN AKG (WAJIB DIIKUTI DARI CHROMA DB)
+==============================================
+{formatted_aturan}
 
-                ==============================================
-                DATA BAHAN MAKANAN (TKPI-COMPACT LINES):
-                ==============================================
-                [!] FILE TKPI_COMPACT.txt telah DILAMPIRKAN. Gunakan data dari file ini sebagai SATU-SATUNYA sumber informasi bahan makanan (name, code, kcal, prot_g, fat_g, carb_g, iron_mg, bdd_percent).
+==============================================
+DATA BAHAN MAKANAN (TKPI-COMPACT LINES):
+==============================================
+[!] FILE TKPI_COMPACT.txt telah DILAMPIRKAN. Gunakan data dari file ini sebagai SATU-SATUNYA sumber informasi bahan makanan (name, code, kcal, prot_g, fat_g, carb_g, iron_mg, bdd_percent).
 
-                ==============================================
-                TUGAS ANDA: BUAT RENCANA MENU MPASI ORIGINAL UNTUK 1 HARI
-                ==============================================
+==============================================
+TUGAS ANDA: BUAT RENCANA MENU MPASI ORIGINAL UNTUK 1 HARI
+==============================================
 
-                LANGKAH-LANGKAH WAJIB:
-                1. ANALISIS ATURAN: 
-                - Pastikan menu memenuhi syarat **ADEKUAT** dan **TEPAT WAKTU**.
-                - WAJIB memenuhi kriteria **MINIMUM KERAGAMAN MAKANAN (MKM)** dan **KONSUMSI TELUR, IKAN, DAGING (TID)**.
-                - WAJIB membatasi **GULA/GARAM** sesuai aturan dari KONTEKS ATURAN.
+LANGKAH-LANGKAH WAJIB:
+1. ANALISIS ATURAN: 
+- Pastikan menu memenuhi syarat **ADEKUAT** dan **TEPAT WAKTU**.
+- WAJIB memenuhi kriteria **MINIMUM KERAGAMAN MAKANAN (MKM)** dan **KONSUMSI TELUR, IKAN, DAGING (TID)**.
+- WAJIB membatasi **GULA/GARAM** sesuai aturan dari KONTEKS ATURAN.
 
-                2. PILIH BAHAN DARI FILE TKPI: 
-                - GUNAKAN HANYA bahan yang ada di FILE `TKPI_COMPACT.txt` yang dilampirkan.
-                - WAJIB sertakan **Nama Bahan**, **KODE TKPI**, dan **Jumlah (gram/ml)** untuk setiap bahan dalam format *string* seperti contoh: `"Nama Bahan (KODE, jumlah)"`.
-                - Hindari bahan alergen: {', '.join(allergies) if allergies else 'tidak ada'}.
+2. PILIH BAHAN DARI FILE TKPI: 
+- GUNAKAN HANYA bahan yang ada di FILE `TKPI_COMPACT.txt` yang dilampirkan.
+- WAJIB sertakan **Nama Bahan**, **KODE TKPI**, dan **Jumlah (gram/ml)** untuk setiap bahan dalam format *string* seperti contoh: `"Nama Bahan (KODE, jumlah)"`.
+- Hindari bahan alergen: {', '.join(allergies) if allergies else 'tidak ada'}.
 
-                3. BUAT MENU ORIGINAL:
-                - Buat kombinasi menu yang **KREATIF** (BUKAN menyalin template).
-                - Pastikan **Tekstur** dan **Porsi** sesuai usia {age_months} bulan (dari KONTEKS ATURAN).
+3. BUAT MENU ORIGINAL:
+- Buat kombinasi menu yang **KREATIF** (BUKAN menyalin template).
+- Pastikan **Tekstur** dan **Porsi** sesuai usia {age_months} bulan (dari KONTEKS ATURAN).
 
-                4. HITUNG NUTRISI:
-                - HITUNG MANUAL total nutrisi (kcal, prot_g, fat_g, carb_g) untuk setiap *meal* dan *total harian* berdasarkan nilai gizi dan **BDD (%)** dari FILE TKPI.
-                - Pastikan total harian **MEMENUHI AKG** dari KONTEKS ATURAN.
+4. HITUNG NUTRISI:
+- HITUNG MANUAL total nutrisi (kcal, prot_g, fat_g, carb_g) untuk setiap *meal* dan *total harian* berdasarkan nilai gizi dan **BDD (%)** dari FILE TKPI.
+- Pastikan total harian **MEMENUHI AKG** dari KONTEKS ATURAN.
 
-                5. VALIDASI & FORMAT:
-                - Output HARUS JSON VALID sesuai format contoh di bawah.
-                - Semua nilai nutrisi harus **ANGKA** (number) tanpa rumus.
+5. VALIDASI & FORMAT:
+- Output HARUS JSON VALID sesuai format contoh di bawah.
+- Semua nilai nutrisi harus **ANGKA** (number) tanpa rumus.
 
-                LARANGAN KETAT:
-                ❌ JANGAN gunakan bahan APAPUN yang tidak ada di FILE `TKPI_COMPACT.txt`.
-                ❌ JANGAN mengarang nilai gizi.
-                ❌ JANGAN gunakan aturan yang tidak ada di KONTEKS ATURAN.
-                ❌ JANGAN tulis rumus dalam nilai nutrisi JSON.
-                ❌ JANGAN gunakan format objek untuk ingredients — gunakan STRING seperti contoh.
+LARANGAN KETAT:
+❌ JANGAN gunakan bahan APAPUN yang tidak ada di FILE `TKPI_COMPACT.txt`.
+❌ JANGAN mengarang nilai gizi.
+❌ JANGAN gunakan aturan yang tidak ada di KONTEKS ATURAN.
+❌ JANGAN tulis rumus dalam nilai nutrisi JSON.
+❌ JANGAN gunakan format objek untuk ingredients — gunakan STRING seperti contoh.
 
-                FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
-                {json_example_original}
-                """
+FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
+{json_example_original}
+"""
 
         print("[INFO] STEP 3: Generating menu plan with Gemini API using ChromaDB context and TKPI file (state 2)...")
         try:
@@ -387,7 +413,7 @@ class ChromaRAGService:
                 "debug_info": {
                     "prompt": prompt,
                     "prompt_length": len(prompt),
-                    "search_query": rules_query
+                    "search_query": context_query
                 }
             }
         except Exception as e:

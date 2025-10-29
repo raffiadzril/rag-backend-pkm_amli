@@ -190,10 +190,11 @@ function generateMenu(event) {
     const ageMonths = parseInt(document.getElementById('age-months').value);
     const weightKg = parseFloat(document.getElementById('weight-kg').value);
     const heightCm = parseInt(document.getElementById('height-cm').value);
-    const residence = document.getElementById('residence').value.trim();
+    const jenisKelamin = document.getElementById('gender').value;
+    const tempatTinggal = document.getElementById('residence').value.trim();
     const allergiesStr = document.getElementById('allergies').value.trim();
     
-    const allergies = allergiesStr 
+    const alergi = allergiesStr 
         ? allergiesStr.split(',').map(a => a.trim()).filter(a => a)
         : [];
 
@@ -206,11 +207,12 @@ function generateMenu(event) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            age_months: ageMonths,
-            weight_kg: weightKg,
-            height_cm: heightCm,
-            residence: residence,
-            allergies: allergies,
+            umur_bulan: ageMonths,
+            berat_badan: weightKg,
+            tinggi_badan: heightCm,
+            jenis_kelamin: jenisKelamin,
+            tempat_tinggal: tempatTinggal,
+            alergi: alergi,
             model_type: selectedModel.type,
             model_name: selectedModel.name
         })
@@ -319,11 +321,12 @@ function displayMenuPlan(data) {
 
     const menuData = data.data;
     const userInfo = data.user_info || {
-        age_months: 'N/A',
-        weight_kg: 'N/A',
-        height_cm: 'N/A',
-        residence: 'N/A',
-        allergies: []
+        umur_bulan: 'N/A',
+        berat_badan: 'N/A',
+        tinggi_badan: 'N/A',
+        jenis_kelamin: 'N/A',
+        tempat_tinggal: 'N/A',
+        alergi: []
     };
     const ragInfo = data.rag_info || {
         documents_retrieved: 0
@@ -354,11 +357,12 @@ function displayMenuPlan(data) {
         <h3>Baby Information</h3>
         <div class="result-item">
             <div class="result-content">
-                <p><strong>Age:</strong> ${safeNumber(userInfo.age_months, 'N/A')} months</p>
-                <p><strong>Weight:</strong> ${safeNumber(userInfo.weight_kg, 'N/A')} kg</p>
-                <p><strong>Height:</strong> ${safeNumber(userInfo.height_cm, 'N/A')} cm</p>
-                <p><strong>Residence:</strong> ${safeString(userInfo.residence, 'N/A')}</p>
-                ${(Array.isArray(userInfo.allergies) && userInfo.allergies.length > 0) ? `<p><strong>Allergies:</strong> ${escapeHtml(userInfo.allergies.join(', '))}</p>` : ''}
+                <p><strong>Age:</strong> ${safeNumber(userInfo.umur_bulan, 'N/A')} months</p>
+                <p><strong>Weight:</strong> ${safeNumber(userInfo.berat_badan, 'N/A')} kg</p>
+                <p><strong>Height:</strong> ${safeNumber(userInfo.tinggi_badan, 'N/A')} cm</p>
+                <p><strong>Gender:</strong> ${safeString(userInfo.jenis_kelamin, 'N/A')}</p>
+                <p><strong>Location:</strong> ${safeString(userInfo.tempat_tinggal, 'N/A')}</p>
+                ${(Array.isArray(userInfo.alergi) && userInfo.alergi.length > 0) ? `<p><strong>Allergies:</strong> ${escapeHtml(userInfo.alergi.join(', '))}</p>` : ''}
             </div>
         </div>
 
