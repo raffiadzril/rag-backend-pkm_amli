@@ -25,6 +25,15 @@
             <button class="nav-btn" data-tab="menu">🍽️ Generate Menu</button>
         </nav>
 
+        <!-- Model Selection Panel -->
+        <div class="model-selector">
+            <label for="model-select">🤖 Select AI Model:</label>
+            <select id="model-select" onchange="updateModelSelection()">
+                <option value="gemini">Gemini 2.5 Flash (Cloud)</option>
+            </select>
+            <span class="model-info" id="model-info">Loading available models...</span>
+        </div>
+
         <!-- Main Content -->
         <main class="content">
             <!-- Search Tab -->
@@ -124,20 +133,6 @@
                         <button type="submit" class="btn btn-primary">Generate Menu Plan</button>
                     </form>
 
-                    <!-- Debug Prompt Display -->
-                    <div id="menu-debug" class="debug-panel hidden">
-                        <h3>🐛 Debug: Prompt Sent to Gemini</h3>
-                        <div class="debug-info">
-                            <p><strong>Search Query:</strong> <span id="debug-search-query"></span></p>
-                            <p><strong>Documents Retrieved:</strong> <span id="debug-docs-count"></span></p>
-                            <p><strong>Prompt Length:</strong> <span id="debug-prompt-length"></span> characters</p>
-                        </div>
-                        <div class="debug-prompt-container">
-                            <p><strong>Full Prompt:</strong></p>
-                            <pre id="debug-prompt-text"></pre>
-                        </div>
-                    </div>
-
                     <div id="menu-results" class="results hidden"></div>
                     <div id="menu-loading" class="loading hidden">
                         <div class="spinner"></div>
@@ -149,7 +144,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>&copy; 2025 RAG MPASI Menu Generator | Powered by ChromaDB & Gemini AI</p>
+            <p>&copy; 2025 RAG MPASI Menu Generator | Powered by ChromaDB with Gemini API & LM Studio (Local)</p>
         </footer>
     </div>
 

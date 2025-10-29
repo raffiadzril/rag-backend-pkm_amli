@@ -100,6 +100,53 @@ body {
     border-bottom-color: #667eea;
 }
 
+/* Model Selector */
+.model-selector {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 20px;
+    background: #f0f4ff;
+    border-bottom: 1px solid #e0e0e0;
+    flex-wrap: wrap;
+}
+
+.model-selector label {
+    font-weight: 600;
+    color: #333;
+    font-size: 0.95em;
+}
+
+.model-selector select {
+    padding: 8px 12px;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 0.95em;
+    min-width: 250px;
+    flex: 1;
+}
+
+.model-selector select:hover {
+    background: #f8faff;
+}
+
+.model-selector select:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.model-info {
+    padding: 6px 12px;
+    background: white;
+    border: 1px solid #667eea;
+    border-radius: 20px;
+    font-size: 0.85em;
+    color: #667eea;
+    font-weight: 500;
+}
+
 /* Content */
 .content {
     padding: 40px;
@@ -505,4 +552,58 @@ textarea:focus {
     .summary-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+/* TKPI Ingredient Styling */
+.ingredient-item {
+    padding: 12px;
+    background: #f5f5f5;
+    margin: 8px 0;
+    border-left: 4px solid #667eea;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.ingredient-item:hover {
+    background: #efefef;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.ingredient-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 0.95em;
+}
+
+.ingredient-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 0.85em;
+    flex-wrap: wrap;
+}
+
+.ingredient-code {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.ingredient-quantity {
+    background: #f0f0f0;
+    color: #666;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+}
+
+.ingredient-label {
+    color: #999;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
