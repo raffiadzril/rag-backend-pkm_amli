@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG MPASI Menu Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🍽️ RAG MPASI Menu Generator</h1>
+            <p>Intelligent Menu Planning for Babies using ChromaDB & Gemini AI</p>
+            <div class="status" id="status">
+                <span class="status-indicator"></span>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-tabs">
+            <button class="nav-btn active" data-tab="search">🔍 Search</button>
+            <button class="nav-btn" data-tab="search-scores">📊 Search with Scores</button>
+            <button class="nav-btn" data-tab="menu">🍽️ Generate Menu</button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+            <!-- Search Tab -->
+            <div class="tab-content active" id="search">
+                <div class="section">
+                    <h2>Document Search</h2>
+                    <p class="description">Search for relevant documents from the dataset</p>
+                    
+                    <div class="form-group">
+                        <label for="search-query">Query</label>
+                        <input type="text" id="search-query" placeholder="e.g., MPASI usia 6 bulan" value="MPASI usia 6 bulan">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="search-top-k">Number of Results</label>
+                        <select id="search-top-k">
+                            <option value="3">3 Results</option>
+                            <option value="5" selected>5 Results</option>
+                            <option value="10">10 Results</option>
+                            <option value="20">20 Results</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="performSearch()">Search</button>
+
+                    <div id="search-results" class="results hidden"></div>
+                    <div id="search-loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <p>Searching documents...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search with Scores Tab -->
+            <div class="tab-content" id="search-scores">
+                <div class="section">
+                    <h2>Document Search with Similarity Scores</h2>
+                    <p class="description">Search documents and view their similarity scores</p>
+                    
+                    <div class="form-group">
+                        <label for="scores-query">Query</label>
+                        <input type="text" id="scores-query" placeholder="e.g., AKG angka kecukupan gizi" value="AKG angka kecukupan gizi">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scores-top-k">Number of Results</label>
+                        <select id="scores-top-k">
+                            <option value="3">3 Results</option>
+                            <option value="5" selected>5 Results</option>
+                            <option value="10">10 Results</option>
+                            <option value="20">20 Results</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="performSearchWithScores()">Search</button>
+
+                    <div id="scores-results" class="results hidden"></div>
+                    <div id="scores-loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <p>Searching documents...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Generate Menu Tab -->
+            <div class="tab-content" id="menu">
+                <div class="section">
+                    <h2>Generate MPASI Menu Plan</h2>
+                    <p class="description">Generate personalized menu plans based on baby information</p>
+                    
+                    <form id="menu-form" onsubmit="generateMenu(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="age-months">Age (months) *</label>
+                                <input type="number" id="age-months" min="4" max="36" value="6" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="weight-kg">Weight (kg) *</label>
+                                <input type="number" id="weight-kg" min="1" max="20" step="0.1" value="7" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="height-cm">Height (cm) *</label>
+                                <input type="number" id="height-cm" min="30" max="120" value="65" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="residence">Residence</label>
+                            <input type="text" id="residence" placeholder="e.g., Indonesia" value="Indonesia">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="allergies">Allergies (comma-separated)</label>
+                            <input type="text" id="allergies" placeholder="e.g., egg, peanut">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Generate Menu Plan</button>
+                    </form>
+
+                    <!-- Debug Prompt Display -->
+                    <div id="menu-debug" class="debug-panel hidden">
+                        <h3>🐛 Debug: Prompt Sent to Gemini</h3>
+                        <div class="debug-info">
+                            <p><strong>Search Query:</strong> <span id="debug-search-query"></span></p>
+                            <p><strong>Documents Retrieved:</strong> <span id="debug-docs-count"></span></p>
+                            <p><strong>Prompt Length:</strong> <span id="debug-prompt-length"></span> characters</p>
+                        </div>
+                        <div class="debug-prompt-container">
+                            <p><strong>Full Prompt:</strong></p>
+                            <pre id="debug-prompt-text"></pre>
+                        </div>
+                    </div>
+
+                    <div id="menu-results" class="results hidden"></div>
+                    <div id="menu-loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <p>Generating menu plan...</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2025 RAG MPASI Menu Generator | Powered by ChromaDB & Gemini AI</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
