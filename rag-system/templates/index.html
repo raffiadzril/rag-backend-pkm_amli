@@ -133,6 +133,20 @@
                         <button type="submit" class="btn btn-primary">Generate Menu Plan</button>
                     </form>
 
+                    <!-- Prompt Preview Panel -->
+                    <div id="prompt-preview" class="debug-panel hidden">
+                        <h3>💬 Prompt Sent to AI Model</h3>
+                        <div class="debug-info">
+                            <p><strong>Search Query:</strong> <span id="preview-search-query"></span></p>
+                            <p><strong>Documents Retrieved:</strong> <span id="preview-docs-count"></span></p>
+                            <p><strong>Prompt Length:</strong> <span id="preview-prompt-length"></span> characters</p>
+                        </div>
+                        <div class="debug-prompt-container">
+                            <p><strong>Prompt:</strong></p>
+                            <pre id="preview-prompt-text"></pre>
+                        </div>
+                    </div>
+
                     <div id="menu-results" class="results hidden"></div>
                     <div id="menu-loading" class="loading hidden">
                         <div class="spinner"></div>

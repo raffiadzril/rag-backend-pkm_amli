@@ -219,6 +219,11 @@ function generateMenu(event) {
     .then(menuData => {
         showLoading('menu-loading', false);
         
+        // Display prompt preview if available
+        if (menuData.debug_info) {
+            displayPromptPreview(menuData.debug_info);
+        }
+        
         // Display menu plan
         if (menuData.status === 'success') {
             displayMenuPlan(menuData);
@@ -369,7 +374,7 @@ function displayMenuPlan(data) {
             const time = safeString(meal.time, 'N/A');
             const menuName = safeString(meal.menu_name, mealKey);
             const portion = safeString(meal.portion, 'N/A');
-            const instructions = safeString(meal.instructions, 'N/A');
+            const instructions = meal.instructions;  // Keep the original format (string or array)
 
             const energyKcal = safeNumber(meal.nutrition?.energy_kcal, 0);
             const proteinG = safeNumber(meal.nutrition?.protein_g, 0);
@@ -441,7 +446,12 @@ function displayMenuPlan(data) {
 
                     <div style="margin-top: 15px;">
                         <strong>Instructions:</strong>
-                        <p style="color: #333; margin-top: 8px;">${escapeHtml(instructions)}</p>
+                        <div style="color: #333; margin-top: 8px;">
+                            ${Array.isArray(instructions) ? 
+                                instructions.map(step => `<p style="margin: 5px 0;">• ${escapeHtml(step)}</p>`).join('') : 
+                                `<p>${escapeHtml(instructions)}</p>`
+                            }
+                        </div>
                     </div>
                 </div>
             `;
@@ -512,6 +522,23 @@ function displayMenuPlan(data) {
 
     resultsDiv.innerHTML = html;
     resultsDiv.classList.remove('hidden');
+}
+
+// Display prompt preview
+function displayPromptPreview(debugInfo) {
+    const promptPreviewDiv = document.getElementById('prompt-preview');
+    
+    try {
+        // Populate debug info
+        document.getElementById('preview-search-query').textContent = debugInfo.search_query || 'N/A';
+        document.getElementById('preview-docs-count').textContent = debugInfo.documents_retrieved || 0;
+        document.getElementById('preview-prompt-length').textContent = (debugInfo.prompt_length || 0).toLocaleString();
+        document.getElementById('preview-prompt-text').textContent = debugInfo.prompt || 'N/A';
+    } catch (error) {
+        console.error('Error displaying prompt preview:', error);
+    }
+    
+    promptPreviewDiv.classList.remove('hidden');
 }
 
 // Helper functions

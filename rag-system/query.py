@@ -205,155 +205,119 @@ class ChromaRAGService:
         rules_query = f"Aturan MPASI dan AKG angka kecukupan gizi untuk usia {age_months} bulan tekstur porsi frekuensi"
         konteks_aturan = self.search_relevant_docs(rules_query, top_k=10) # Retrieve rules/AGK
 
-        # === STEP 2: Prepare Prompt ===
+                # === STEP 2: Prepare Prompt (REVERTED TO ORIGINAL STRING-BASED INGREDIENTS) ===
         formatted_aturan = "\n\n---\n".join(konteks_aturan)
         allergies_text = f"\n- PENTING: Bayi alergi terhadap: {', '.join(allergies)}. Hindari bahan ini." if allergies else "\n- Tidak ada alergi yang dilaporkan."
-
-        # Build comprehensive prompt with full JSON format instructions
-        json_example = '''{
+        
+        # --- JSON EXAMPLE ORIGINAL (string-based ingredients, NO inline objects) ---
+        json_example_original = '''{
   "breakfast": {
     "time": "06:00-07:00",
-    "menu_name": "nama menu original yang unik",
+    "menu_name": "nama menu original (BUKAN template)",
     "ingredients": [
-      {{"nama": "bahan 1", "kode_tkpi": "AR001", "jumlah": "100g"}},
-      {{"nama": "bahan 2", "kode_tkpi": "AR002", "jumlah": "50g"}},
-      {{"nama": "bahan 3", "kode_tkpi": "AR003", "jumlah": "75g"}}
+      "Beras putih (AR001, 50g)",
+      "Ayam dada (AY001, 30g)",
+      "Wortel (SA002, 20g)"
     ],
-    "portion": "jumlah porsi total",
-    "instructions": "cara membuat",
-    "nutrition": {{
-      "energy_kcal": 150,
-      "protein_g": 6.5,
-      "carbs_g": 18.0,
-      "fat_g": 3.2
-    }}
-  },
-  "morning_snack": {{
-    "time": "09:00-10:00",
-    "menu_name": "nama menu snack",
-    "ingredients": [
-      {{"nama": "bahan 1", "kode_tkpi": "AR001", "jumlah": "50g"}},
-      {{"nama": "bahan 2", "kode_tkpi": "AR004", "jumlah": "40g"}}
+    "portion": "150 ml / 120g",
+    "instructions": [
+      "Masak beras sampai lunak",
+      "Rebus ayam potong kecil",
+      "Campur dengan wortel yang sudah dihaluskan"
     ],
-    "portion": "jumlah porsi total",
-    "instructions": "cara membuat",
-    "nutrition": {{
-      "energy_kcal": 80,
-      "protein_g": 2.0,
-      "carbs_g": 12.0,
-      "fat_g": 1.5
-    }}
-  }},
-  "lunch": {{
-    "time": "12:00-13:00",
-    "menu_name": "nama menu makan siang",
-    "ingredients": [
-      {{"nama": "bahan 1", "kode_tkpi": "AR001", "jumlah": "100g"}},
-      {{"nama": "bahan 2", "kode_tkpi": "AR002", "jumlah": "60g"}},
-      {{"nama": "bahan 3", "kode_tkpi": "AR005", "jumlah": "80g"}}
-    ],
-    "portion": "jumlah porsi total",
-    "instructions": "cara membuat",
-    "nutrition": {{
-      "energy_kcal": 160,
-      "protein_g": 7.5,
-      "carbs_g": 20.0,
-      "fat_g": 3.5
-    }}
-  }},
-  "afternoon_snack": {{
-    "time": "15:00-16:00",
-    "menu_name": "nama menu snack sore",
-    "ingredients": [
-      {{"nama": "bahan 1", "kode_tkpi": "AR006", "jumlah": "60g"}}
-    ],
-    "portion": "jumlah porsi total",
-    "instructions": "cara membuat",
-    "nutrition": {{
-      "energy_kcal": 60,
-      "protein_g": 1.0,
-      "carbs_g": 10.0,
-      "fat_g": 0.5
-    }}
-  }},
-  "dinner": {{
-    "time": "18:00-19:00",
-    "menu_name": "nama menu makan malam",
-    "ingredients": [
-      {{"nama": "bahan 1", "kode_tkpi": "AR001", "jumlah": "90g"}},
-      {{"nama": "bahan 2", "kode_tkpi": "AR003", "jumlah": "70g"}},
-      {{"nama": "bahan 3", "kode_tkpi": "AR007", "jumlah": "60g"}}
-    ],
-    "portion": "jumlah porsi total",
-    "instructions": "cara membuat",
-    "nutrition": {{
-      "energy_kcal": 140,
-      "protein_g": 6.0,
-      "carbs_g": 18.0,
+    "nutrition": {
+      "energy_kcal": 145,
+      "protein_g": 6.2,
+      "carbs_g": 20.5,
       "fat_g": 2.8
-    }}
-  }},
-  "daily_summary": {{
-    "total_energy_kcal": 590,
-    "total_protein_g": 23.0,
-    "total_carbs_g": 78.0,
-    "total_fat_g": 11.5,
-    "akg_requirement": "Kebutuhan AKG untuk bayi",
-    "akg_compliance": "Evaluasi apakah total harian memenuhi AKG"
-  }},
-  "notes": [
-    "[SUCCESS] Catatan 1",
-    "[SUCCESS] Catatan 2"
-  ],
-  "recommendations": [
-    "Rekomendasi 1",
-    "Rekomendasi 2"
-  ]
-}}'''
-
+    }
+  },
+  "morning_snack": {
+    "time": "09:00-10:00",
+    "menu_name": "nama menu original",
+    "ingredients": [
+      "Pisang matang (BH001, 50g)",
+      "ASI/Formula (JR002, 100 ml)"
+    ],
+    "portion": "100 ml + 50g",
+    "instructions": [
+      "Haluskan pisang",
+      "Campur dengan ASI/formula"
+    ],
+    "nutrition": {
+      "energy_kcal": 65,
+      "protein_g": 1.5,
+      "carbs_g": 14.2,
+      "fat_g": 0.3
+    }
+  },
+  "daily_summary": {
+    "total_energy_kcal": 470,
+    "total_protein_g": 21.0,
+    "total_carbs_g": 71.7,
+    "total_fat_g": 8.0,
+    "akg_requirement": "AKG energi {age_months}mo: 400-500 kcal, Protein: 10-13g (dari KONTEKS ATURAN)",
+    "akg_compliance": "Evaluasi kepatuhan MKM/TID dan AKG harian"
+  },
+  "recommendation": "Pastikan variasi bahan makanan setiap hari untuk memenuhi kebutuhan mikronutrien. Jika asupan energi mendekati batas bawah AKG, pertimbangkan penambahan porsi lemak sehat seperti alpukat atau minyak sayur dalam batas aman."
+}'''
+        
+        # Build prompt using the ORIGINAL format (string-based ingredients)
         prompt = f"""Kamu adalah AI perencana menu MPASI bayi yang SANGAT TELITI dan KREATIF.
 
-INFORMASI BAYI:
-- Usia: {age_months} bulan
-- Berat Badan: {user_input.get('weight_kg', 'N/A')} kg
-- Tinggi Badan: {user_input.get('height_cm', 'N/A')} cm
-- Tempat Tinggal: {user_input.get('residence', 'Indonesia')}{allergies_text}
+                INFORMASI BAYI:
+                - Usia: {age_months} bulan
+                - Berat Badan: {user_input.get('weight_kg', 'N/A')} kg
+                - Tinggi Badan: {user_input.get('height_cm', 'N/A')} cm
+                - Tempat Tinggal: {user_input.get('residence', 'Indonesia')}{allergies_text}
 
-==============================================
-KONTEKS ATURAN MPASI DAN AKG (WAJIB DIIKUTI):
-==============================================
-{formatted_aturan}
+                ==============================================
+                KONTEKS ATURAN MPASI DAN AKG (WAJIB DIIKUTI DARI CHROMA DB)
+                ==============================================
+                {formatted_aturan}
 
-==============================================
-TUGAS ANDA: BUAT RENCANA MENU MPASI ORIGINAL UNTUK 1 HARI
-==============================================
+                ==============================================
+                DATA BAHAN MAKANAN (TKPI-COMPACT LINES):
+                ==============================================
+                [!] FILE TKPI_COMPACT.txt telah DILAMPIRKAN. Gunakan data dari file ini sebagai SATU-SATUNYA sumber informasi bahan makanan (name, code, kcal, prot_g, fat_g, carb_g, iron_mg, bdd_percent).
 
-[!] PERHATIAN PENTING: FILE TKPI_COMPACT.txt TELAH DILAMPIRKAN. WAJIB GUNAKAN HANYA DATA DARI FILE INI!
+                ==============================================
+                TUGAS ANDA: BUAT RENCANA MENU MPASI ORIGINAL UNTUK 1 HARI
+                ==============================================
 
-WAJIB OUTPUT SEBAGAI JSON YANG VALID! Tidak boleh ada text lain selain JSON.
+                LANGKAH-LANGKAH WAJIB:
+                1. ANALISIS ATURAN: 
+                - Pastikan menu memenuhi syarat **ADEKUAT** dan **TEPAT WAKTU**.
+                - WAJIB memenuhi kriteria **MINIMUM KERAGAMAN MAKANAN (MKM)** dan **KONSUMSI TELUR, IKAN, DAGING (TID)**.
+                - WAJIB membatasi **GULA/GARAM** sesuai aturan dari KONTEKS ATURAN.
 
-FORMAT JSON YANG HARUS DIOUTPUT (COPY STRUKTUR INI PERSIS):
-{json_example}
+                2. PILIH BAHAN DARI FILE TKPI: 
+                - GUNAKAN HANYA bahan yang ada di FILE `TKPI_COMPACT.txt` yang dilampirkan.
+                - WAJIB sertakan **Nama Bahan**, **KODE TKPI**, dan **Jumlah (gram/ml)** untuk setiap bahan dalam format *string* seperti contoh: `"Nama Bahan (KODE, jumlah)"`.
+                - Hindari bahan alergen: {', '.join(allergies) if allergies else 'tidak ada'}.
 
-INSTRUKSI WAJIB:
-1. [!] GUNAKAN HANYA BAHAN DARI FILE TKPI_COMPACT.txt YANG DILAMPIRKAN - JANGAN MENGGUNAKAN BAHAN LAIN
-2. [!] SETIAP BAHAN HARUS MEMILIKI KODE TKPI (KODE) YANG VALID DARI FILE
-3. [!] AMBIL NILAI NUTRISI HANYA DARI FILE TKPI_COMPACT.txt - JANGAN ESTIMASI ATAU MENGARANG
-4. [!] FORMAT INGREDIENTS: [{{"nama":"nama bahan exact dari TKPI","kode_tkpi":"KODE exact","jumlah":"gram/ml"}}]
-5. [+] Buat menu ORIGINAL dan UNIK dengan kombinasi bahan dari TKPI
-6. [+] Gunakan bahan yang sesuai untuk usia {age_months} bulan
-7. [+] Hitung nutrisi dengan ANGKA PASTI dari file TKPI
-8. [+] Semua nilai nutrisi harus ANGKA (number), bukan string
-9. [+] Hindari bahan alergen: {', '.join(allergies) if allergies else 'tidak ada'}
-10. [+] WAJIB OUTPUT HANYA JSON VALID, tidak ada text pembuka/penutup
-11. [+] Jangan gunakan markdown code blocks (```)
-12. [+] Setiap field HARUS ada, tidak boleh ada field yang kosong
+                3. BUAT MENU ORIGINAL:
+                - Buat kombinasi menu yang **KREATIF** (BUKAN menyalin template).
+                - Pastikan **Tekstur** dan **Porsi** sesuai usia {age_months} bulan (dari KONTEKS ATURAN).
 
-[!] PERINGATAN PENTING:
-- SEMUA KODE_TKPI HARUS SAMA DENGAN KODE DI FILE TKPI_COMPACT.txt (contoh: AR001, AR002, etc)
-- Jika ada bahan yang tidak ditemukan di file TKPI_COMPACT.txt, JANGAN gunakan bahan itu
-- Jika tidak yakin nilai nutrisi atau kode, cek di file TKPI_COMPACT.txt
-- Semua keputusan menu HARUS berdasarkan data di file TKPI_COMPACT.txt yang dilampirkan"""
+                4. HITUNG NUTRISI:
+                - HITUNG MANUAL total nutrisi (kcal, prot_g, fat_g, carb_g) untuk setiap *meal* dan *total harian* berdasarkan nilai gizi dan **BDD (%)** dari FILE TKPI.
+                - Pastikan total harian **MEMENUHI AKG** dari KONTEKS ATURAN.
+
+                5. VALIDASI & FORMAT:
+                - Output HARUS JSON VALID sesuai format contoh di bawah.
+                - Semua nilai nutrisi harus **ANGKA** (number) tanpa rumus.
+
+                LARANGAN KETAT:
+                ❌ JANGAN gunakan bahan APAPUN yang tidak ada di FILE `TKPI_COMPACT.txt`.
+                ❌ JANGAN mengarang nilai gizi.
+                ❌ JANGAN gunakan aturan yang tidak ada di KONTEKS ATURAN.
+                ❌ JANGAN tulis rumus dalam nilai nutrisi JSON.
+                ❌ JANGAN gunakan format objek untuk ingredients — gunakan STRING seperti contoh.
+
+                FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
+                {json_example_original}
+                """
 
         print("[INFO] STEP 3: Generating menu plan with Gemini API using ChromaDB context and TKPI file (state 2)...")
         try:
@@ -419,6 +383,11 @@ INSTRUKSI WAJIB:
                     "retrieval_source": "ChromaDB (MPASI rules) + Gemini File API (TKPI data)",
                     "generation_model": "gemini-2.5-flash",
                     "baby_age": age_months
+                },
+                "debug_info": {
+                    "prompt": prompt,
+                    "prompt_length": len(prompt),
+                    "search_query": rules_query
                 }
             }
         except Exception as e:
@@ -493,18 +462,3 @@ if __name__ == "__main__":
         print("\n[ERROR] Skipping menu plan generation - Gemini API not configured.")
     elif not tkpi_file_ref:
          print("\n[ERROR] Skipping menu plan generation - TKPI file upload failed or reference missing.")
-
-    # --- Keep script running for interactive queries if needed ---
-    # print("\n--- Interactive Query Mode (Type 'exit' to quit) ---")
-    # while True:
-    #    try:
-    #        user_query = input("\nAsk about MPASI rules or ingredients: ")
-    #        if user_query.lower() == 'exit':
-    #            break
-    #        docs = rag_service.search_relevant_docs(user_query, top_k=5)
-    #        print("\nRelevant Information:")
-    #        for i, doc in enumerate(docs, 1):
-    #             print(f"{i}. {doc}\n---")
-    #    except KeyboardInterrupt:
-    #        break
-    # print("\nExiting interactive mode.")
