@@ -1,34 +1,45 @@
-# C. PEMANTAUAN PRAKTIK MP-ASI ANAK USIA 6-23 BULAN SECARA RUTIN
+# Pemantauan Praktik MP-ASI (Usia 6-23 Bulan)
 
-Pemantauan praktik MP-ASI usia 6–23 bulan secara rutin adalah kegiatan yang dilaksanakan untuk kepentingan pemantauan pelaksanaan implementasi program. Pemantauan praktik MP-ASI dilaksanakan oleh pelaksana program di tingkat pusat hingga ke Posyandu. Dalam pemantauan rutin, terdapat 3 aspek yang dapat digunakan untuk memotret kemajuan praktik MP-ASI sebagai berikut:
+Pemantauan praktik MP-ASI adalah kegiatan untuk memotret kemajuan implementasi program, yang dilaksanakan dari tingkat pusat hingga Posyandu. Terdapat 3 aspek utama yang dipantau.
 
-1. **Minimum keragaman makanan (MKM) pada anak usia 6–23 bulan**  
-   *Definisi Operasional:*  
-   Anak usia 6–23 bulan mengonsumsi makanan dan minuman setidaknya 5 dari 8 jenis kelompok makanan pada hari kemarin sebelum wawancara (memiliki skor keragaman makanan ≥5 jenis kelompok makanan). Delapan jenis kelompok makanan tersebut yaitu:  
-   * **Kelompok 1:** ASI  
-   * **Kelompok 2:** Makanan pokok (serealia, umbi-umbian, dll.)  
-   * **Kelompok 3:** Kacang-kacangan (termasuk tempe, tahu, dll.)  
-   * **Kelompok 4:** Produk susu hewani (susu, susu formula, yogurt, keju)  
-   * **Kelompok 5:** Daging-dagingan (ayam, ikan, daging merah, jeroan, dll.)  
-   * **Kelompok 6:** Telur (ayam, puyuh, bebek, dll.)  
-   * **Kelompok 7:** Buah dan sayuran kaya vitamin A (pepaya, mangga, wortel, bayam, kangkung, dll.)  
-   * **Kelompok 8:** Buah dan sayuran lainnya (pisang, jeruk, semangka, buncis, terong, dll.)
+---
 
-   *Penarikan Kesimpulan:*  
-   * Apabila skor keragaman ≥5 jenis kelompok makanan, maka MKM = ya  
-   * Apabila skor keragaman <5 jenis kelompok makanan, maka MKM = tidak
+## 1. Minimum Keragaman Makanan (MKM)
 
-2. **Konsumsi telur, ikan, atau daging (TID) pada anak usia 6–23 bulan**  
-   *Definisi Operasional:*  
-   Anak usia 6–23 bulan mengonsumsi telur, ikan, atau daging pada hari kemarin sebelum wawancara. (Ini merujuk pada konsumsi dari Kelompok 5 dan/atau Kelompok 6).  
-   *Penarikan Kesimpulan:*  
-   * Apabila skor kelompok daging-dagingan (Kelompok 5) atau telur (Kelompok 6) = 1 (dikonsumsi), maka TID = ya  
-   * Apabila skor kelompok daging-dagingan (Kelompok 5) dan telur (Kelompok 6) = 0 (tidak dikonsumsi), maka TID = tidak
+* **Definisi:** Anak usia 6–23 bulan mengonsumsi **minimal 5 dari 8** jenis kelompok makanan pada hari kemarin (skor keragaman ≥5).
+* **Penarikan Kesimpulan:**
+    * Skor ≥5 kelompok = **MKM Ya**
+    * Skor <5 kelompok = **MKM Tidak**
 
-3. **Anak usia 6–23 bulan mendapatkan MP-ASI baik**  
-   *Definisi Operasional:*  
-   Anak usia 6–23 bulan mengonsumsi makanan dan minuman setidaknya 5 dari 8 jenis kelompok makanan (MKM = Ya) DAN mengonsumsi telur, ikan, atau daging (TID = Ya) pada hari kemarin sebelum wawancara.  
-   *Penarikan Kesimpulan:*  
-   * Apabila MKM = ya dan TID = ya, maka MP-ASI baik = ya  
-   * Apabila MKM = ya dan TID = tidak atau MKM = tidak dan TID = ya, maka MP-ASI baik = tidak  
-   * Apabila MKM = tidak dan TID = tidak, maka MP-ASI baik = tidak
+### 8 Kelompok Makanan untuk MKM
+1.  **Kelompok 1:** ASI
+2.  **Kelompok 2:** Makanan pokok (serealia, umbi-umbian, dll.)
+3.  **Kelompok 3:** Kacang-kacangan (termasuk tempe, tahu, dll.)
+4.  **Kelompok 4:** Produk susu hewani (susu, susu formula, yogurt, keju)
+5.  **Kelompok 5:** Daging-dagingan (ayam, ikan, daging merah, jeroan, dll.)
+6.  **Kelompok 6:** Telur (ayam, puyuh, bebek, dll.)
+7.  **Kelompok 7:** Buah dan sayuran kaya vitamin A (pepaya, mangga, wortel, bayam, kangkung, dll.)
+8.  **Kelompok 8:** Buah dan sayuran lainnya (pisang, jeruk, semangka, buncis, terong, dll.)
+
+---
+
+## 2. Konsumsi Telur, Ikan, atau Daging (TID)
+
+* **Definisi:** Anak usia 6–23 bulan mengonsumsi telur, ikan, atau daging pada hari kemarin.
+* **Kriteria:** Merujuk pada konsumsi dari **Kelompok 5 (Daging-dagingan)** dan/atau **Kelompok 6 (Telur)**.
+* **Penarikan Kesimpulan:**
+    * Konsumsi Kelompok 5 atau Kelompok 6 = **TID Ya**
+    * Tidak konsumsi Kelompok 5 dan Kelompok 6 = **TID Tidak**
+
+---
+
+## 3. Anak Mendapatkan MP-ASI Baik
+
+* **Definisi:** Anak usia 6–23 bulan memenuhi **kedua** kriteria berikut pada hari kemarin:
+    1.  **MKM = Ya** (Konsumsi ≥5 kelompok makanan)
+    2.  **TID = Ya** (Konsumsi telur, ikan, atau daging)
+* **Penarikan Kesimpulan:**
+    * (MKM = Ya) DAN (TID = Ya) = **MP-ASI Baik Ya**
+    * Jika salah satu atau kedua kriteria tidak terpenuhi = **MP-ASI Baik Tidak**
+
+---

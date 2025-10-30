@@ -154,16 +154,107 @@ class ChromaRAGService:
         self.vectordb = vectordb
         self.gemini_model = gemini_model # Store the model instance
 
-    def search_relevant_docs(self, query: str, top_k: int = 10) -> list:
-        # Simplified similarity_search (using vectordb directly)
+    def search_relevant_docs(self, query: str, top_k: int = 10, umur_bulan=None, jenis_kelamin=None, berat_badan=None, tinggi_badan=None, tempat_tinggal=None) -> list:
+        """
+        Enhanced search with metadata filtering and query transformation
+        """
         try:
-            results = self.vectordb.similarity_search(query, k=top_k)
-            relevant_docs = [doc.page_content for doc in results]
-            print(f"[SUCCESS] Retrieved {len(relevant_docs)} relevant documents for query")
+            # 1. Transform the user query to multiple focused sub-queries
+            sub_queries = self.transform_query(query, umur_bulan)
+            
+            all_results = []
+            
+            # 2. For each sub-query, perform metadata-filtered search
+            for sub_query in sub_queries:
+                # Base filter - if age provided, filter by relevant age range
+                filter_dict = {}
+                if umur_bulan is not None:
+                    # Find documents relevant to the baby's age
+                    filter_dict = {
+                        "$and": [
+                            {"usia_mulai_bulan": {"$lte": umur_bulan}},
+                            {"usia_selesai_bulan": {"$gte": umur_bulan}}
+                        ]
+                    }
+                
+                # Perform similarity search with metadata filter
+                if filter_dict:
+                    # Use similarity_search_with_filter if available, otherwise use metadata filtering
+                    try:
+                        results = self.vectordb.similarity_search(
+                            sub_query, 
+                            k=top_k,
+                            filter=filter_dict
+                        )
+                    except:
+                        # Fallback: get results and filter manually
+                        all_docs = self.vectordb.similarity_search(sub_query, k=top_k*2)
+                        results = []
+                        for doc in all_docs:
+                            if self._doc_matches_filter(doc, umur_bulan):
+                                results.append(doc)
+                                if len(results) >= top_k:
+                                    break
+                else:
+                    # No age filter, just regular search
+                    results = self.vectordb.similarity_search(sub_query, k=top_k)
+                
+                all_results.extend(results)
+            
+            # Remove duplicates while preserving order
+            seen_content = set()
+            unique_results = []
+            for result in all_results:
+                content = result.page_content
+                if content not in seen_content:
+                    seen_content.add(content)
+                    unique_results.append(result)
+            
+            relevant_docs = [doc.page_content for doc in unique_results[:top_k]]
+            print(f"[SUCCESS] Retrieved {len(relevant_docs)} relevant documents for transformed queries: {sub_queries}")
             return relevant_docs
         except Exception as e:
             print(f"[ERROR] Error searching documents: {e}")
-            return []
+            # Fallback to original search method
+            try:
+                results = self.vectordb.similarity_search(query, k=top_k)
+                relevant_docs = [doc.page_content for doc in results]
+                print(f"[WARNING] Fallback search used. Retrieved {len(relevant_docs)} relevant documents")
+                return relevant_docs
+            except Exception as fallback_e:
+                print(f"[ERROR] Fallback search also failed: {fallback_e}")
+                return []
+
+    def _doc_matches_filter(self, doc, umur_bulan):
+        """Helper method to manually check if a document matches the age filter"""
+        if umur_bulan is None:
+            return True
+        metadata = doc.metadata
+        usia_mulai = metadata.get('usia_mulai_bulan', 0)
+        usia_selesai = metadata.get('usia_selesai_bulan', 100)  # default high value
+        return usia_mulai <= umur_bulan <= usia_selesai
+
+    def transform_query(self, original_query, umur_bulan=None):
+        """
+        Transform the user query into focused sub-queries for better retrieval
+        """
+        # Define age-specific sub-queries based on the baby's age
+        age_context = f"untuk usia {umur_bulan} bulan" if umur_bulan else ""
+        
+        # Generate focused sub-queries for different aspects of MPASI
+        sub_queries = [
+            f"Aturan MPASI dan AKG angka kecukupan gizi {age_context}",
+            f"Angka Kecukupan Gizi (AKG) untuk bayi {age_context}",
+            f"Aturan porsi tekstur frekuensi MPASI {age_context}",
+            f"Prinsip dasar dan syarat pemberian MPASI",
+            f"Makanan yang dianjurkan atau dilarang untuk MPASI {age_context}",
+            f"Tekstur dan konsistensi MPASI {age_context}",
+            f"Frekuensi pemberian MPASI {age_context}",
+            f"Jumlah porsi MPASI {age_context}",
+        ]
+        
+        # Filter out empty sub-queries and return
+        return [q for q in sub_queries if q.strip()]
 
 
     def generate_menu_plan_with_chroma(self, user_input: dict) -> dict:
@@ -228,7 +319,16 @@ class ChromaRAGService:
         
         context_query = " ".join(context_query_parts)
         
-        konteks_aturan = self.search_relevant_docs(context_query, top_k=10) # Retrieve rules/AGK
+        # Pass baby information to the enhanced search function for hybrid search
+        konteks_aturan = self.search_relevant_docs(
+            context_query, 
+            top_k=10,
+            umur_bulan=age_months,
+            jenis_kelamin=jenis_kelamin,
+            berat_badan=berat_badan,
+            tinggi_badan=tinggi_badan,
+            tempat_tinggal=tempat_tinggal
+        ) # Retrieve rules/AGK with metadata filtering
 
                 # === STEP 2: Prepare Prompt (REVERTED TO ORIGINAL STRING-BASED INGREDIENTS) ===
         formatted_aturan = "\n\n---\n".join(konteks_aturan)

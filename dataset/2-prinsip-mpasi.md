@@ -1,16 +1,31 @@
-# 2. Prinsip
+## 2. Prinsip Kesenjangan Energi (Energy Gap) MP-ASI
 
-**Gambaran adanya kesenjangan (Gap) dari kebutuhan energi bayi dengan energi yang diperoleh ASI seiring pertambahan usia.**
+Prinsip utama Makanan Pendamping ASI (MP-ASI) adalah sebagai **pendamping** atau **pelengkap** ASI, **bukan sebagai pengganti ASI**. Pemberian ASI tetap dilanjutkan hingga anak berusia 2 tahun.
 
-Prinsip Makanan Pendamping ASI (MP-ASI) bukanlah sebagai makanan pengganti ASI, akan tetapi perannya sebagai pendamping atau melengkapi ASI, meskipun pemberian ASI tetap dilanjutkan hingga anak berusia 2 tahun. Pada usia 0-6 bulan, ASI masih mampu memenuhi seluruh kebutuhan energi bayi, namun sering penambahan usia bayi sejak mulai usia 6 bulan MP-ASI dibutuhkan untuk memenuhi kebutuhan energi yang tidak dapat dipenuhi dari ASI saja. Proporsi pemenuhan kebutuhan energi dari ASI dan MP-ASI pada baduta dapat dilihat pada tabel berikut:
+Pemberian MP-ASI dimulai pada usia **6 bulan** karena adanya **"kesenjangan energi" (*energy gap*)**—yaitu kondisi di mana ASI saja sudah tidak mampu memenuhi 100% kebutuhan energi bayi yang terus meningkat seiring pertumbuhannya.
 
-| Usia Anak      | Energi dari ASI | Energi dari MP-ASI |
-|----------------|-----------------|--------------------|
-| 0-6 bulan      | 100%            | 0%                 |
-| 6-8 bulan      | 66.7%           | 33.3%              |
-| 9-11 bulan     | 50%             | 50%                |
-| 12-23 bulan    | 33.3%           | 66.7%              |
+---
 
-*Catatan: Periode 0-6 bulan hanya dari bayi yang sangat sebelum genap usia 6 bulan (0-5 bulan). Sumber: Lahir tanggal 2 Januari 2023 sampai 1 Juli 2023 merupakan periode 0-6 bulan.*
+### Proporsi Pemenuhan Kebutuhan Energi: ASI vs MP-ASI
 
-Pada usia 6-8 bulan, ASI hanya dapat memenuhi dua per tiga kebutuhan energi anak, saat usia 9-11 bulan ASI hanya mampu memenuhi setengah kebutuhan energi anak, dan pada usia 12-23 bulan ASI hanya mampu memberikan sepertiga kebutuhan energi anak. Oleh karena itu, untuk memenuhi kebutuhan energi anak yang kurang tersebut (di mulai anak usia 6 bulan ke atas) diperlukan MP-ASI. Manfaat ASI tetap terus diberikan kepada anak hingga usia 2 tahun untuk menunjang kebutuhan energi anak dan peranan ASI lainnya termasuk perlindungan terhadap penyakit, serta membangun hubungan emosional (bonding) yang memperkuat kasih sayang dan kenyamanan antara ibu dan anak.
+Tabel berikut menunjukkan proporsi pemenuhan kebutuhan energi harian yang diharapkan dari ASI dan MP-ASI sesuai usia anak:
+
+| Usia Anak     | Energi dari ASI       | Energi dari MP-ASI    | Keterangan |
+|---------------|------------------------|------------------------|------------|
+| **0–5 bulan** | 100%                   | 0%                     | Kebutuhan energi 100% dipenuhi oleh ASI |
+| **6–8 bulan** | ~66,7% (dua pertiga)   | ~33,3% (sepertiga)     | MP-ASI diperlukan untuk mengisi **1/3** kesenjangan energi |
+| **9–11 bulan**| ~50% (setengah)        | ~50% (setengah)        | MP-ASI diperlukan untuk mengisi **1/2** kesenjangan energi |
+| **12–23 bulan**| ~33,3% (sepertiga)    | ~66,7% (dua pertiga)   | MP-ASI diperlukan untuk mengisi **2/3** kesenjangan energi |
+
+> **Catatan**: Rentang usia "0–6 bulan" dalam konteks ini mengacu pada bayi usia **0–5 bulan** (belum genap 6 bulan).
+
+---
+
+### Manfaat Melanjutkan Pemberian ASI Setelah 6 Bulan
+
+Meskipun MP-ASI diperlukan untuk memenuhi kebutuhan energi, **ASI tetap wajib diberikan hingga anak berusia 2 tahun** karena manfaat penting berikut:
+- Membantu memenuhi sebagian kebutuhan energi harian anak.
+- Memberikan perlindungan imunologis terhadap infeksi dan penyakit.
+- Memperkuat ikatan emosional (*bonding*) serta memberikan rasa nyaman antara ibu dan anak.
+
+--- 
