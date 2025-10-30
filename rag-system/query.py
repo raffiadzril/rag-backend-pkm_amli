@@ -426,19 +426,17 @@ LANGKAH-LANGKAH WAJIB:
 - Buat kombinasi menu yang **KREATIF** (BUKAN menyalin template).
 - Pastikan **Tekstur** dan **Porsi** sesuai usia {age_months} bulan (dari KONTEKS ATURAN).
 
-4. HITUNG NUTRISI:
-- HITUNG MANUAL total nutrisi (kcal, prot_g, fat_g, carb_g) untuk setiap *meal* dan *total harian* berdasarkan nilai gizi dan **BDD (%)** dari FILE TKPI.
-- Pastikan total harian **MEMENUHI AKG** dari KONTEKS ATURAN.
+4. KALKULASI NUTRISI:
+- Sistem akan MENGHITUNG MANUAL nutrisi setelah menerima menu dari Anda berdasarkan data dari FILE TKPI.
+- ANDA TIDAK PERLU MENGHITUNG nilai nutrisi secara akurat, hanya menyediakan informasi bahan dan jumlahnya.
+- Fokus pada kreativitas dan kepatuhan terhadap aturan MPASI.
 
 5. VALIDASI & FORMAT:
 - Output HARUS JSON VALID sesuai format contoh di bawah.
-- Semua nilai nutrisi harus **ANGKA** (number) tanpa rumus.
+- Nilai nutrisi dapat diisi sementara, karena akan dihitung ulang secara manual oleh sistem.
 
 LARANGAN KETAT:
 ❌ JANGAN gunakan bahan APAPUN yang tidak ada di FILE `TKPI_COMPACT.txt`.
-❌ JANGAN mengarang nilai gizi.
-❌ JANGAN gunakan aturan yang tidak ada di KONTEKS ATURAN.
-❌ JANGAN tulis rumus dalam nilai nutrisi JSON.
 ❌ JANGAN gunakan format objek untuk ingredients — gunakan STRING seperti contoh.
 
 FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
@@ -501,9 +499,12 @@ FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
             menu_data = json.loads(menu_data_text)
             print(f"  [SUCCESS] Successfully parsed JSON with keys: {list(menu_data.keys())}")
 
+            # Calculate nutrition based on ingredients if available in the menu data
+            calculated_menu_data = self.calculate_nutrition_for_menu(menu_data)
+            
             return {
                 "status": "success",
-                "data": menu_data,
+                "data": calculated_menu_data,
                 "rag_info": {
                     "documents_retrieved": len(konteks_aturan),
                     "retrieval_source": "ChromaDB (MPASI rules) + Gemini File API (TKPI data)",
@@ -535,6 +536,159 @@ FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
             error_message = "Error during Gemini API call or processing: {}".format(original_error_str)
             # Return error message to the frontend
             return {"status": "error", "message": error_message, "raw_response": raw_response_text}
+
+    def _doc_matches_filter(self, doc, umur_bulan):
+        """Helper method to manually check if a document matches the age filter"""
+        if umur_bulan is None:
+            return True
+        metadata = doc.metadata
+        usia_mulai = metadata.get('usia_mulai_bulan', 0)
+        usia_selesai = metadata.get('usia_selesai_bulan', 100)  # default high value
+        return usia_mulai <= umur_bulan <= usia_selesai
+
+    def calculate_nutrition_for_menu(self, menu_data):
+        """
+        Calculate nutrition based on ingredients using TKPI-2020.json data
+        """
+        try:
+            # Load TKPI data
+            tkpi_data = self.load_tkpi_data()
+            
+            # Process each meal in the menu
+            for meal_key in ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner']:
+                if meal_key in menu_data:
+                    meal = menu_data[meal_key]
+                    if 'ingredients' in meal:
+                        # Calculate nutrition for this meal
+                        meal_nutrition = self.calculate_meal_nutrition(meal['ingredients'], tkpi_data)
+                        # Update the nutrition in the meal
+                        if 'nutrition' in meal:
+                            meal['nutrition'].update(meal_nutrition)
+                        else:
+                            meal['nutrition'] = meal_nutrition
+
+            # Calculate daily summary if it doesn't exist or needs updating
+            if 'daily_summary' not in menu_data:
+                menu_data['daily_summary'] = {}
+            
+            daily_nutrition = self.calculate_daily_nutrition(menu_data, ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'])
+            menu_data['daily_summary'].update(daily_nutrition)
+            
+            return menu_data
+        except Exception as e:
+            print(f"[ERROR] Error calculating nutrition: {str(e)}")
+            # Return original menu data if calculation fails
+            return menu_data
+
+    def load_tkpi_data(self):
+        """
+        Load the TKPI-2020.json file and parse it into a dictionary
+        Format: {code: {name, ENERGI (Kal), PROTEIN (g), LEMAK (g), KH (g), ...}}
+        """
+        import os
+        import json
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        tkpi_file_path = os.path.abspath(os.path.join(script_dir, "../dataset/TKPI-2020.json"))
+        
+        tkpi_data = {}
+        
+        if os.path.exists(tkpi_file_path):
+            with open(tkpi_file_path, 'r', encoding='utf-8') as f:
+                try:
+                    data = json.load(f)
+                    for item in data:
+                        code = item.get('KODE')
+                        if code:
+                            tkpi_data[code] = item
+                except json.JSONDecodeError:
+                    print(f"[ERROR] Could not parse TKPI-2020.json file")
+        else:
+            print(f"[ERROR] TKPI-2020.json not found at {tkpi_file_path}")
+        
+        return tkpi_data
+
+    def calculate_meal_nutrition(self, ingredients, tkpi_data):
+        """
+        Calculate total nutrition for a meal based on its ingredients
+        Ingredients format: ["Name (CODE, amount)", ...]
+        """
+        total_energy = 0.0
+        total_protein = 0.0
+        total_carbs = 0.0
+        total_fat = 0.0
+        
+        for ingredient_str in ingredients:
+            # Parse ingredient string: "Name (CODE, amount)"
+            # Expected format: "Beras putih (AR001, 50g)" or "Ayam dada (AY001, 30g)"
+            import re
+            # Look for pattern: (CODE, amount)
+            match = re.search(r'\(([^,]+),\s*([0-9.]+)\s*([a-zA-Z]*)\)', ingredient_str)
+            if match:
+                code = match.group(1).strip()
+                amount = float(match.group(2))
+                unit = match.group(3).strip().lower()
+                
+                # Convert amount to grams if needed (assume ml = g for simplicity)
+                if unit == 'ml':
+                    amount = amount  # 1 ml ~ 1 g for food
+                elif unit == 'g' or unit == '':  # Empty unit means grams
+                    amount = amount
+                else:
+                    # If other units, assume it's in grams
+                    amount = amount
+                
+                # Look up in TKPI data
+                if code in tkpi_data:
+                    item = tkpi_data[code]
+                    
+                    # Get nutritional values per 100g from TKPI-2020.json format
+                    kcal_per_100g = float(item.get('ENERGI (Kal)', 0))
+                    prot_per_100g = float(item.get('PROTEIN (g)', 0))
+                    fat_per_100g = float(item.get('LEMAK (g)', 0))
+                    carb_per_100g = float(item.get('KH (g)', 0))
+                    
+                    # Calculate nutrition based on the amount used
+                    # Formula: (value per 100g) * (amount in grams) / 100
+                    total_energy += (kcal_per_100g * amount) / 100
+                    total_protein += (prot_per_100g * amount) / 100
+                    total_fat += (fat_per_100g * amount) / 100
+                    total_carbs += (carb_per_100g * amount) / 100
+                else:
+                    print(f"[WARNING] Ingredient code '{code}' not found in TKPI data")
+            else:
+                print(f"[WARNING] Could not parse ingredient: {ingredient_str}")
+        
+        return {
+            "energy_kcal": round(total_energy, 1),
+            "protein_g": round(total_protein, 1),
+            "carbs_g": round(total_carbs, 1),
+            "fat_g": round(total_fat, 1)
+        }
+
+    def calculate_daily_nutrition(self, menu_data, meal_keys):
+        """
+        Calculate total daily nutrition by summing up all meals
+        """
+        total_energy = 0.0
+        total_protein = 0.0
+        total_carbs = 0.0
+        total_fat = 0.0
+        
+        for meal_key in meal_keys:
+            if meal_key in menu_data and 'nutrition' in menu_data[meal_key]:
+                nutrition = menu_data[meal_key]['nutrition']
+                total_energy += nutrition.get('energy_kcal', 0)
+                total_protein += nutrition.get('protein_g', 0)
+                total_carbs += nutrition.get('carbs_g', 0)
+                total_fat += nutrition.get('fat_g', 0)
+        
+        return {
+            "total_energy_kcal": round(total_energy, 1),
+            "total_protein_g": round(total_protein, 1),
+            "total_carbs_g": round(total_carbs, 1),
+            "total_fat_g": round(total_fat, 1)
+        }
 
 
 # ============================================================================
