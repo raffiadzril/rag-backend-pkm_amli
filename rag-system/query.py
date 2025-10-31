@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 import traceback # Added for detailed error traceback
+# Use CrossEncoder for reranking (required)
+from sentence_transformers import CrossEncoder
 
 load_dotenv()
 
@@ -15,7 +17,8 @@ load_dotenv()
 # ============================================================================
 
 db_path = './chroma_db'
-embedding_model_name = "sentence-transformers/all-MiniLM-L6-v2"
+# Use BGE embeddings for improved semantic density
+embedding_model_name = "BAAI/bge-large-en-v1.5"
 print(f"Initializing local embedding model ({embedding_model_name})...")
 embeddings = HuggingFaceEmbeddings(
     model_name=embedding_model_name
@@ -152,7 +155,11 @@ else:
 class ChromaRAGService:
     def __init__(self, vectordb, gemini_model):
         self.vectordb = vectordb
-        self.gemini_model = gemini_model # Store the model instance
+        self.gemini_model = gemini_model  # Store the model instance
+        # Initialize cross-encoder reranker (required for reranking)
+        # NOTE: This will raise ImportError if sentence_transformers is not installed
+        self.reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+        print('[INFO] Cross-encoder reranker initialized')
 
     def search_relevant_docs(self, query: str, top_k: int = 10, umur_bulan=None, jenis_kelamin=None, berat_badan=None, tinggi_badan=None, tempat_tinggal=None) -> list:
         """
@@ -160,47 +167,41 @@ class ChromaRAGService:
         """
         try:
             # 1. Transform the user query to multiple focused sub-queries
-            sub_queries = self.transform_query(query, umur_bulan)
+            # Retrieval should be focused on age only. Weight, height and location
+            # will NOT be included in retrieval queries and are only used in the LLM prompt.
+            sub_queries = self.transform_query_age_only(umur_bulan)
             
             all_results = []
             
-            # 2. For each sub-query, perform metadata-filtered search
+            # 2. For each sub-query, perform similarity search WITHOUT relying on Chroma metadata filters.
+            #    Some indexes may have no metadata (user requested metadata removal). To be robust we always
+            #    retrieve a larger candidate set and then apply age-based filtering in Python.
             for sub_query in sub_queries:
-                # Base filter - if age provided, filter by relevant age range
-                filter_dict = {}
+                # Retrieve a larger candidate pool (no filter) so reranker has enough context
+                try:
+                    # Pull a larger set to allow post-filtering and reranking
+                    candidates = self.vectordb.similarity_search(sub_query, k=max(top_k * 5, top_k * 2))
+                except Exception:
+                    # As a last resort, try a smaller fetch
+                    candidates = self.vectordb.similarity_search(sub_query, k=top_k)
+
+                # If age filtering requested, apply it in-Python using document metadata (which may be empty)
                 if umur_bulan is not None:
-                    # Find documents relevant to the baby's age
-                    filter_dict = {
-                        "$and": [
-                            {"usia_mulai_bulan": {"$lte": umur_bulan}},
-                            {"usia_selesai_bulan": {"$gte": umur_bulan}}
-                        ]
-                    }
-                
-                # Perform similarity search with metadata filter
-                if filter_dict:
-                    # Use similarity_search_with_filter if available, otherwise use metadata filtering
-                    try:
-                        results = self.vectordb.similarity_search(
-                            sub_query, 
-                            k=top_k,
-                            filter=filter_dict
-                        )
-                    except:
-                        # Fallback: get results and filter manually
-                        all_docs = self.vectordb.similarity_search(sub_query, k=top_k*2)
-                        results = []
-                        for doc in all_docs:
-                            if self._doc_matches_filter(doc, umur_bulan):
-                                results.append(doc)
-                                if len(results) >= top_k:
-                                    break
+                    results = [doc for doc in candidates if self._doc_matches_filter(doc, umur_bulan)]
                 else:
-                    # No age filter, just regular search
-                    results = self.vectordb.similarity_search(sub_query, k=top_k)
-                
-                all_results.extend(results)
+                    results = candidates
+
+                # Trim to top_k per sub-query to limit volume
+                all_results.extend(results[: top_k])
             
+            # Record which sub-queries we used for retrieval (for debugging)
+            try:
+                self.last_retrieval_queries = sub_queries
+                self.last_retrieval_query = sub_queries[0] if sub_queries else None
+            except Exception:
+                self.last_retrieval_queries = []
+                self.last_retrieval_query = None
+
             # Remove duplicates while preserving order
             seen_content = set()
             unique_results = []
@@ -210,13 +211,29 @@ class ChromaRAGService:
                     seen_content.add(content)
                     unique_results.append(result)
             
-            relevant_docs = [doc.page_content for doc in unique_results[:top_k]]
+            # Dense retrieval: use Chroma similarity search results
+            dense_texts = [doc.page_content for doc in unique_results]
+
+            # Select a candidate pool (dense_top * multiplier) for reranking
+            candidate_pool = dense_texts[: max(top_k * 5, len(dense_texts))]
+
+            # Rerank with cross-encoder (pairwise scoring)
+            pairs = [[query, t] for t in candidate_pool]
+            scores = self.reranker.predict(pairs)
+            scored = list(zip(candidate_pool, scores))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            final_texts = [t for t, s in scored]
+
+            relevant_docs = final_texts[:top_k]
             print(f"[SUCCESS] Retrieved {len(relevant_docs)} relevant documents for transformed queries: {sub_queries}")
             return relevant_docs
         except Exception as e:
             print(f"[ERROR] Error searching documents: {e}")
             # Fallback to original search method
             try:
+                # Record fallback query
+                self.last_retrieval_queries = [query]
+                self.last_retrieval_query = query
                 results = self.vectordb.similarity_search(query, k=top_k)
                 relevant_docs = [doc.page_content for doc in results]
                 print(f"[WARNING] Fallback search used. Retrieved {len(relevant_docs)} relevant documents")
@@ -257,6 +274,19 @@ class ChromaRAGService:
         return [q for q in sub_queries if q.strip()]
 
 
+    def transform_query_age_only(self, umur_bulan=None):
+        """
+        Produce a single, focused age-based query for retrieval.
+        This ensures retrieval prioritizes age-relevant rules (portion, texture, frequency).
+        """
+        age_context = f"untuk usia {umur_bulan} bulan" if umur_bulan else ""
+        # Return multiple focused queries: one explicitly for AKG (angka kecukupan gizi)
+        # and one for practical MPASI rules (porsi, tekstur, frekuensi). Both are age-scoped.
+        q_akg = f"Angka Kecukupan Gizi (AKG) untuk bayi {age_context}"
+        q_rules = f"Aturan MPASI untuk bayi {age_context} - porsi, tekstur, frekuensi, prinsip pemberian"
+        return [q_akg, q_rules]
+
+
     def generate_menu_plan_with_chroma(self, user_input: dict) -> dict:
 
         if not self.gemini_model:
@@ -265,12 +295,84 @@ class ChromaRAGService:
         print(f"[DEBUG] USING MODEL FOR GENERATION: {self.gemini_model.model_name}")
 
         # Extract and validate parameters
-        umur_bulan = user_input.get('umur_bulan', user_input.get('age_months', 6))  # Support both formats
-        berat_badan = user_input.get('berat_badan', user_input.get('weight_kg', 7))
-        tinggi_badan = user_input.get('tinggi_badan', user_input.get('height_cm', 65))
-        jenis_kelamin = user_input.get('jenis_kelamin', 'laki-laki')  # Default to 'laki-laki' if not provided
-        tempat_tinggal = user_input.get('tempat_tinggal', user_input.get('residence', 'Indonesia'))
-        alergi = user_input.get('alergi', user_input.get('allergies', []))
+        # Do NOT use hardcoded defaults here — require the caller to provide values.
+        # Accept both Indonesian and English keys, but if a required value is missing, return an error.
+        umur_bulan = None
+        if 'umur_bulan' in user_input:
+            umur_bulan = user_input['umur_bulan']
+        elif 'age_months' in user_input:
+            umur_bulan = user_input['age_months']
+
+        berat_badan = None
+        if 'berat_badan' in user_input:
+            berat_badan = user_input['berat_badan']
+        elif 'weight_kg' in user_input:
+            berat_badan = user_input['weight_kg']
+
+        tinggi_badan = None
+        if 'tinggi_badan' in user_input:
+            tinggi_badan = user_input['tinggi_badan']
+        elif 'height_cm' in user_input:
+            tinggi_badan = user_input['height_cm']
+
+        # Optional fields (no hard defaults). Use provided values when present.
+        jenis_kelamin = user_input.get('jenis_kelamin') if 'jenis_kelamin' in user_input else user_input.get('gender')
+        tempat_tinggal = user_input.get('tempat_tinggal') if 'tempat_tinggal' in user_input else user_input.get('residence')
+        alergi = user_input.get('alergi') if 'alergi' in user_input else user_input.get('allergies')
+
+        # Validate required numeric inputs and convert types. Fail fast with clear messages.
+        missing = []
+        if umur_bulan is None:
+            missing.append("umur_bulan / age_months")
+        if berat_badan is None:
+            missing.append("berat_badan / weight_kg")
+        if tinggi_badan is None:
+            missing.append("tinggi_badan / height_cm")
+        if missing:
+            return {"status": "error", "message": f"Missing required fields: {', '.join(missing)}"}
+
+        # Convert types and report conversion errors
+        try:
+            umur_bulan = int(umur_bulan)
+        except Exception:
+            return {"status": "error", "message": "Invalid umur_bulan / age_months: must be an integer"}
+
+        try:
+            berat_badan = float(berat_badan)
+        except Exception:
+            return {"status": "error", "message": "Invalid berat_badan / weight_kg: must be a number"}
+
+        try:
+            tinggi_badan = float(tinggi_badan)
+        except Exception:
+            return {"status": "error", "message": "Invalid tinggi_badan / height_cm: must be a number"}
+
+        # Normalize remaining optional fields and standardize the input keys to Indonesian names
+        if jenis_kelamin is None:
+            jenis_kelamin = None
+
+        # Normalize allergies to a list
+        if alergi is None:
+            alergi = []
+        elif isinstance(alergi, str):
+            # allow comma separated string
+            alergi = [a.strip() for a in alergi.split(',') if a.strip()]
+        elif not isinstance(alergi, list):
+            # coerce other iterable types to list
+            try:
+                alergi = list(alergi)
+            except Exception:
+                alergi = []
+
+        # Build a standardized input dictionary using Indonesian keys
+        normalized_input = {
+            'umur_bulan': umur_bulan,
+            'berat_badan': berat_badan,
+            'tinggi_badan': tinggi_badan,
+            'jenis_kelamin': jenis_kelamin,
+            'tempat_tinggal': tempat_tinggal,
+            'alergi': alergi
+        }
 
         # Validate age range for MPASI (6-24 months)
         if umur_bulan < 6 or umur_bulan > 24:
@@ -322,7 +424,7 @@ class ChromaRAGService:
         # Pass baby information to the enhanced search function for hybrid search
         konteks_aturan = self.search_relevant_docs(
             context_query, 
-            top_k=10,
+            top_k=15,
             umur_bulan=age_months,
             jenis_kelamin=jenis_kelamin,
             berat_badan=berat_badan,
@@ -422,9 +524,14 @@ LANGKAH-LANGKAH WAJIB:
 - WAJIB sertakan **Nama Bahan**, **KODE TKPI**, dan **Jumlah (gram/ml)** untuk setiap bahan dalam format *string* seperti contoh: `"Nama Bahan (KODE, jumlah)"`.
 - Hindari bahan alergen: {', '.join(allergies) if allergies else 'tidak ada'}.
 
-3. BUAT MENU ORIGINAL:
+3. BUAT MENU ORIGINAL SESUAI ATURAN:
 - Buat kombinasi menu yang **KREATIF** (BUKAN menyalin template).
-- Pastikan **Tekstur** dan **Porsi** sesuai usia {age_months} bulan (dari KONTEKS ATURAN).
+- **ANALISIS ATURAN KONTEKS (WAJIB DIPATUHI):**
+    - **NUTRISI:** Targetkan total kalori harian agar mendekati **"Kebutuhan Jumlah Energi dari MP-ASI"** (cth: "200 kkal") yang ditemukan di KONTEKS ATURAN.
+    - **TEKSTUR & PORSI:** Pastikan **"Konsistensi / Tekstur"** (cth: "bubur kental", "dicincang halus") dan **"Jumlah Setiap Kali Makan"** (cth: "125 ml") SANGAT SESUAI dengan usia {age_months} bulan.
+    - **FREKUENSI:** Patuhi aturan **"Frekuensi"** (cth: "Utama: 2-3x, Selingan: 1-2x").
+        - Gunakan pemetaan ini: `Utama` = (`breakfast`, `lunch`, `dinner`) dan `Selingan` = (`morning_snack`, `afternoon_snack`).
+        - **PENTING:** Jika aturan frekuensi adalah "Utama: 2-3x", buatkan 2 atau 3 menu utama. Jika "Selingan: 1-2x", buatkan 1 atau 2 menu selingan. Anda yang memutuskan jumlah pastinya (misal, 3 utama dan 1 selingan) agar total nutrisi harian paling mendekati target.
 
 4. KALKULASI NUTRISI:
 - Sistem akan MENGHITUNG MANUAL nutrisi setelah menerima menu dari Anda berdasarkan data dari FILE TKPI.
@@ -442,6 +549,13 @@ LARANGAN KETAT:
 FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
 {json_example_original}
 """
+
+        # Extra instruction to avoid list-wrapping or markdown fences in model output
+        prompt += (
+            "\n\nPENTING: KEMBALIKAN HANYA SATU OBJEK JSON VALID (TIDAK DALAM BENTUK ARRAY). "
+            "JANGAN sertakan teks penjelasan, markdown fences (```), atau output tambahan di luar JSON. "
+            "Respons harus berupa *satu* objek JSON persis seperti format contoh di atas."
+        )
 
         print("[INFO] STEP 3: Generating menu plan with Gemini API using ChromaDB context and TKPI file (state 2)...")
         try:
@@ -497,6 +611,24 @@ FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
 
             print(f"  [INFO] Parsing JSON response...")
             menu_data = json.loads(menu_data_text)
+
+            # Normalize response: some LLMs return a single-object inside a list (e.g. [ { ... } ]).
+            # Handle these cases robustly so downstream code can assume a dict-like menu_data.
+            if isinstance(menu_data, list):
+                if len(menu_data) == 0:
+                    raise ValueError("LLM returned an empty list instead of a menu object.")
+                first = menu_data[0]
+                if isinstance(first, dict):
+                    print("  [INFO] Response is a list; using the first object as the menu JSON.")
+                    menu_data = first
+                else:
+                    # Wrap non-dict list responses into an envelope so downstream code won't crash
+                    print("  [WARNING] Response is a list of non-dict items; wrapping into {'menu_list': [...] }.")
+                    menu_data = {"menu_list": menu_data}
+
+            if not isinstance(menu_data, dict):
+                raise ValueError(f"Unexpected JSON type for menu_data: {type(menu_data)}")
+
             print(f"  [SUCCESS] Successfully parsed JSON with keys: {list(menu_data.keys())}")
 
             # Calculate nutrition based on ingredients if available in the menu data
@@ -514,7 +646,10 @@ FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
                 "debug_info": {
                     "prompt": prompt,
                     "prompt_length": len(prompt),
-                    "search_query": context_query
+                    "search_query": context_query,
+                    "retrieval_queries": getattr(self, 'last_retrieval_queries', []),
+                    "retrieval_query_used": getattr(self, 'last_retrieval_query', None),
+                    "normalized_input": normalized_input
                 }
             }
         except Exception as e:
@@ -530,7 +665,7 @@ FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
             print(f"  Last response received (or N/A): {raw_response_text[:200] if raw_response_text != 'N/A' else 'N/A'}")
             
             # --- FIX: Use safe string formatting to avoid 'Invalid format specifier' ---
-            # Get the original error string
+            # Get the original error stringx
             original_error_str = str(e)
             # Construct the message using .format() which is safer for untrusted strings
             error_message = "Error during Gemini API call or processing: {}".format(original_error_str)

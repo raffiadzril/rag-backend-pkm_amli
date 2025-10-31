@@ -12,25 +12,41 @@ from query_lm_studio import get_chroma_rag_service_lm_studio, available_models a
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
-# Initialize RAG services
-try:
-    rag_service_gemini = get_chroma_rag_service()
-    GEMINI_READY = True
-    print("[INFO] Connected to ChromaDB and Gemini API service")
-except Exception as e:
-    print(f"[ERROR] Error initializing Gemini RAG service: {e}")
-    GEMINI_READY = False
+# Globals for services (initialized later)
+rag_service_gemini = None
+rag_service_lm_studio = None
+GEMINI_READY = False
+LM_STUDIO_READY = False
+RAG_READY = False
 
-try:
-    rag_service_lm_studio = get_chroma_rag_service_lm_studio()
-    LM_STUDIO_READY = lm_studio_ready
-    print(f"[INFO] Connected to ChromaDB and LM Studio service (Ready: {LM_STUDIO_READY})")
-except Exception as e:
-    print(f"[ERROR] Error initializing LM Studio RAG service: {e}")
-    LM_STUDIO_READY = False
 
-# Determine default service availability
-RAG_READY = GEMINI_READY or LM_STUDIO_READY
+def init_services():
+    """Initialize RAG services. This function is safe to call only in the reloader child
+    process to avoid double-initialization when Flask debug reloader is enabled."""
+    global rag_service_gemini, rag_service_lm_studio, GEMINI_READY, LM_STUDIO_READY, RAG_READY
+
+    # Initialize Gemini-backed RAG service
+    try:
+        rag_service_gemini = get_chroma_rag_service()
+        GEMINI_READY = True
+        print("[INFO] Connected to ChromaDB and Gemini API service")
+    except Exception as e:
+        print(f"[ERROR] Error initializing Gemini RAG service: {e}")
+        GEMINI_READY = False
+
+    # Initialize LM Studio RAG service (if available)
+    try:
+        rag_service_lm_studio = get_chroma_rag_service_lm_studio()
+        LM_STUDIO_READY = lm_studio_ready
+        print(f"[INFO] Connected to ChromaDB and LM Studio service (Ready: {LM_STUDIO_READY})")
+    except Exception as e:
+        print(f"[ERROR] Error initializing LM Studio RAG service: {e}")
+        LM_STUDIO_READY = False
+
+    # Determine default service availability
+    RAG_READY = GEMINI_READY or LM_STUDIO_READY
+
+    return
 
 
 @app.route('/')
@@ -113,16 +129,13 @@ def search_with_scores():
 def generate_menu():
     """Generate menu plan API endpoint"""
     try:
-        data = request.get_json()
-        
-        user_input = {
-            'age_months': data.get('age_months', 6),
-            'weight_kg': data.get('weight_kg', 7),
-            'height_cm': data.get('height_cm', 65),
-            'allergies': data.get('allergies', []),
-            'residence': data.get('residence', 'Indonesia')
-        }
-        
+        data = request.get_json() or {}
+
+        # Use the incoming form data directly. Do NOT substitute hardcoded defaults here.
+        # We pass through whatever the frontend submitted (Indonesian or English keys).
+        # Remove control keys (model selection) from the user_input payload.
+        user_input = {k: v for k, v in data.items() if k not in ('model_type', 'model_name')}
+
         model_type = data.get('model_type', 'gemini')  # 'gemini' or 'lm_studio'
         model_name = data.get('model_name', None)  # Specific model for LM Studio
         
@@ -200,5 +213,12 @@ if __name__ == '__main__':
         print(f"  Available models: {', '.join(lm_studio_models)}")
     print("\nServer: http://localhost:5000")
     print("="*70 + "\n")
-    
+    # When debug=True Flask runs a reloader which spawns a monitoring parent and
+    # a child worker process. Heavy initialization should run only in the child.
+    # The WERKZEUG_RUN_MAIN env var is set to 'true' in the child process.
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+        # Initialize services in the serving process
+        init_services()
+
+    # Run the app. Disable the reloader if you prefer to avoid the two-process behavior
     app.run(debug=True, host='0.0.0.0', port=5000)

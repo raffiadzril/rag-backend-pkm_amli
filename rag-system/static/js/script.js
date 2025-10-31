@@ -538,6 +538,22 @@ function displayPromptPreview(debugInfo) {
         document.getElementById('preview-docs-count').textContent = debugInfo.documents_retrieved || 0;
         document.getElementById('preview-prompt-length').textContent = (debugInfo.prompt_length || 0).toLocaleString();
         document.getElementById('preview-prompt-text').textContent = debugInfo.prompt || 'N/A';
+        // New: show retrieval query used and all retrieval queries
+        document.getElementById('preview-retrieval-query').textContent = debugInfo.retrieval_query_used || '';
+        try {
+            const allQueries = debugInfo.retrieval_queries || [];
+            document.getElementById('preview-retrieval-queries').textContent = Array.isArray(allQueries) ? allQueries.join(' | ') : String(allQueries);
+        } catch (e) {
+            document.getElementById('preview-retrieval-queries').textContent = '';
+        }
+
+        // New: show normalized input as pretty JSON
+        try {
+            const norm = debugInfo.normalized_input || {};
+            document.getElementById('preview-normalized-input').textContent = JSON.stringify(norm, null, 2);
+        } catch (e) {
+            document.getElementById('preview-normalized-input').textContent = String(debugInfo.normalized_input || 'N/A');
+        }
     } catch (error) {
         console.error('Error displaying prompt preview:', error);
     }

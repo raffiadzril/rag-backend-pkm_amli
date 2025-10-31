@@ -5,10 +5,20 @@ import os
 import sys
 
 # Add the rag-system path to import the query module
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'rag-system'))
+# sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'rag-system'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'rag-system'))
 
-from query import get_chroma_rag_service
-from query_lm_studio import get_chroma_rag_service_lm_studio, available_models as lm_studio_models, lm_studio_ready
+# Import only the Gemini RAG service
+try:
+    from query import get_chroma_rag_service
+    print("✓ Successfully imported query module")
+    GEMINI_IMPORT_SUCCESS = True
+except ImportError as e:
+    print(f"✗ Error importing Gemini RAG service: {e}")
+    import traceback
+    print(f"Traceback: {traceback.format_exc()}")
+    get_chroma_rag_service = None
+    GEMINI_IMPORT_SUCCESS = False
 
 app = FastAPI(
     title="MPASI Menu Generator API",
@@ -17,23 +27,24 @@ app = FastAPI(
 )
 
 # Initialize RAG services
-try:
-    rag_service_gemini = get_chroma_rag_service()
-    GEMINI_READY = True
-    print("✓ Connected to ChromaDB and Gemini API service")
-except Exception as e:
-    print(f"✗ Error initializing Gemini RAG service: {e}")
-    GEMINI_READY = False
+GEMINI_READY = False
 
-try:
-    rag_service_lm_studio = get_chroma_rag_service_lm_studio()
-    LM_STUDIO_READY = lm_studio_ready
-    print(f"✓ Connected to ChromaDB and LM Studio service (Ready: {LM_STUDIO_READY})")
-except Exception as e:
-    print(f"✗ Error initializing LM Studio RAG service: {e}")
-    LM_STUDIO_READY = False
+if GEMINI_IMPORT_SUCCESS:
+    try:
+        print("Attempting to initialize Gemini RAG service...")
+        rag_service_gemini = get_chroma_rag_service()
+        GEMINI_READY = True
+        print("✓ Successfully connected to ChromaDB and initialized Gemini API service")
+    except Exception as e:
+        print(f"✗ Error initializing Gemini RAG service: {e}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
+        GEMINI_READY = False
+else:
+    print("✗ Gemini RAG service not available due to import error")
 
-RAG_READY = GEMINI_READY or LM_STUDIO_READY
+RAG_READY = GEMINI_READY
+print(f"RAG Ready Status: {RAG_READY} (GEMINI_READY: {GEMINI_READY}, GEMINI_IMPORT_SUCCESS: {GEMINI_IMPORT_SUCCESS})")
 
 # Pydantic models for request/response
 class MenuGenerationRequest(BaseModel):
@@ -57,8 +68,7 @@ def get_status():
         "status": "online",
         "services": {
             "chromadb": "ready",
-            "gemini": "ready" if GEMINI_READY else "unavailable",
-            "lm_studio": "ready" if LM_STUDIO_READY else "unavailable"
+            "gemini": "ready" if GEMINI_READY else "unavailable"
         }
     }
 
@@ -75,16 +85,6 @@ def get_models():
             "available": True
         })
     
-    if LM_STUDIO_READY:
-        lm_models = rag_service_lm_studio.get_available_models()
-        for model in lm_models:
-            models.append({
-                "id": model,
-                "name": model,
-                "provider": "LM Studio (Local)",
-                "available": True
-            })
-    
     return {
         "status": "success",
         "models": models,
@@ -96,7 +96,9 @@ def generate_menu(request: MenuGenerationRequest):
     """Generate MPASI menu plan"""
     try:
         if not RAG_READY:
-            raise HTTPException(status_code=503, detail="RAG service not available")
+            detail_msg = f"RAG service not available. Status - GEMINI_READY: {GEMINI_READY}, GEMINI_IMPORT_SUCCESS: {GEMINI_IMPORT_SUCCESS}"
+            print(f"✗ RAG service not available: {detail_msg}")
+            raise HTTPException(status_code=503, detail=detail_msg)
         
         # Prepare user input in the format expected by the RAG service
         user_input = {
@@ -108,22 +110,11 @@ def generate_menu(request: MenuGenerationRequest):
             'alergi': request.alergi
         }
         
-        # Determine which service to use
-        if request.model_type == 'lm_studio':
-            if not LM_STUDIO_READY:
-                raise HTTPException(status_code=503, detail="LM Studio service not available. Make sure LM Studio is running.")
-            
-            if request.model_name is None and available_models:
-                model_name = available_models[0] if available_models else None
-            else:
-                model_name = request.model_name
-                
-            menu_plan = rag_service_lm_studio.generate_menu_plan_with_chroma(user_input, model_name)
-        else:  # Default to Gemini
-            if not GEMINI_READY:
-                raise HTTPException(status_code=503, detail="Gemini API service not available.")
-            
-            menu_plan = rag_service_gemini.generate_menu_plan_with_chroma(user_input)
+        # Use Gemini service only
+        if not GEMINI_READY:
+            raise HTTPException(status_code=503, detail="Gemini API service not available.")
+        
+        menu_plan = rag_service_gemini.generate_menu_plan_with_chroma(user_input)
         
         if menu_plan.get('status') == 'error':
             raise HTTPException(status_code=400, detail=menu_plan.get('message', 'Unknown error occurred'))

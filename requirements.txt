@@ -4,3 +4,6 @@ fastapi
 uvicorn[standard]
 pydantic
 python-multipart
+sentence-transformers
+rank_bm25
+transformers

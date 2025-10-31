@@ -1,0 +1,37 @@
+# Dependencies
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+**/.vscode
+**/.git
+
+# Environment
+**/venv
+**/env
+**/ENV
+**/venv*
+**/env*
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# Logs
+**/logs
+**/*.log
+
+# Databases
+**/chroma_db
+
+# Output
+**/dist
+**/build
+**/*.egg-info
+
+# Local config
+**/.env.local
+**/.env.dev
+**/.env.test
+**/.env.production
