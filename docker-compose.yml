@@ -3,8 +3,8 @@ version: '3.8'
 services:
   fastapi-mpasi:
     build:
-      context: ./fastapi_app
-      dockerfile: Dockerfile
+      context: ./
+      dockerfile: fastapi_app/Dockerfile
       args:
         - PIP_TIMEOUT=300
         - PIP_DEFAULT_TIMEOUT=300
@@ -13,19 +13,13 @@ services:
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - PYTHONPATH=/app
-    volumes:
-      # Mount the rag-system directory to access query.py and related files
-      - ../rag-system:/app/rag-system
-      # Mount the dataset directory for access to TKPI and other data files
-      - ../dataset:/app/dataset
-      # Optional: mount .env file for configuration
-      - ../.env:/app/.env:ro
+    # Volume mounts removed — all needed files are copied into the image during build
     networks:
       - mpasi-network
     restart: unless-stopped
     # Add health check to ensure service is ready
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/status"]
       interval: 30s
       timeout: 10s
       retries: 3

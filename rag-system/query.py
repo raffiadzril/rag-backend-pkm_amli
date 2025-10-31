@@ -4,8 +4,8 @@ import time
 import google.generativeai as genai
 from dotenv import load_dotenv
 # Import local embedding model
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
 import traceback # Added for detailed error traceback
 # Use CrossEncoder for reranking (required)
 from sentence_transformers import CrossEncoder
@@ -534,6 +534,11 @@ LANGKAH-LANGKAH WAJIB:
   - `sdt` (sendok teh)
   - `butir`, `iris`, `potong`, `lembar`, `gelas`, atau `ml`
   - Contoh format: `"Ikan kembung (TKPI123, 1 ekor sedang)"` atau `"Minyak kelapa (TKPI045, 1 sdt)"`.
+- **PENTING: Format string ingredient HARUS konsisten. JANGAN gunakan titik (.) untuk memisahkan kata. Gunakan spasi normal.**
+  - ✅ BENAR: `"Ayam hati segar (FR007, 25g)"`
+  - ❌ SALAH: `"Ayam. hati. segar (FR007, 25g)"`
+  - ✅ BENAR: `"Santan (KP003, 40 ml)"`
+  - ❌ SALAH: `"Santan (dengan air) (KP003, 40 ml)"` (jangan tambah parenthesis atau deskripsi dalam kode TKPI)
 - Hindari bahan alergen: {', '.join(allergies) if allergies else 'tidak ada'}.
 
 4. BUAT MENU ORIGINAL SESUAI ATURAN:
@@ -779,6 +784,7 @@ MENGGUNAKAN BAHAN LOKAL yang sesuai dengan daerah tempat tinggal bayi.
         """
         Calculate total nutrition for a meal based on its ingredients
         Ingredients format: ["Name (CODE, amount)", ...]
+        Handles flexible LLM output: dots instead of spaces, descriptive quantities, parenthetical text in codes, etc.
         """
         total_energy = 0.0
         total_protein = 0.0
@@ -786,45 +792,84 @@ MENGGUNAKAN BAHAN LOKAL yang sesuai dengan daerah tempat tinggal bayi.
         total_fat = 0.0
         
         for ingredient_str in ingredients:
-            # Parse ingredient string: "Name (CODE, amount)"
-            # Expected format: "Beras putih (AR001, 50g)" or "Ayam dada (AY001, 30g)"
+            # Parse ingredient string with flexible regex to handle LLM quirks
+            # Expected format: "Beras putih (AR001, 50g)" or "Ayam. hati. segar (FR007, 25g)"
+            # Also handles: "Santan (dengan air) (KP003, 40 ml)" where code may have extra text
             import re
-            # Look for pattern: (CODE, amount)
-            match = re.search(r'\(([^,]+),\s*([0-9.]+)\s*([a-zA-Z]*)\)', ingredient_str)
-            if match:
-                code = match.group(1).strip()
-                amount = float(match.group(2))
-                unit = match.group(3).strip().lower()
-                
-                # Convert amount to grams if needed (assume ml = g for simplicity)
-                if unit == 'ml':
-                    amount = amount  # 1 ml ~ 1 g for food
-                elif unit == 'g' or unit == '':  # Empty unit means grams
-                    amount = amount
-                else:
-                    # If other units, assume it's in grams
-                    amount = amount
-                
-                # Look up in TKPI data
-                if code in tkpi_data:
-                    item = tkpi_data[code]
-                    
-                    # Get nutritional values per 100g from TKPI-2020.json format
-                    kcal_per_100g = float(item.get('ENERGI (Kal)', 0))
-                    prot_per_100g = float(item.get('PROTEIN (g)', 0))
-                    fat_per_100g = float(item.get('LEMAK (g)', 0))
-                    carb_per_100g = float(item.get('KH (g)', 0))
-                    
-                    # Calculate nutrition based on the amount used
-                    # Formula: (value per 100g) * (amount in grams) / 100
-                    total_energy += (kcal_per_100g * amount) / 100
-                    total_protein += (prot_per_100g * amount) / 100
-                    total_fat += (fat_per_100g * amount) / 100
-                    total_carbs += (carb_per_100g * amount) / 100
-                else:
-                    print(f"[WARNING] Ingredient code '{code}' not found in TKPI data")
-            else:
+            
+            # Step 1: Find all parenthetical groups with potential TKPI codes
+            # Look for pattern like (CODE, ...) where CODE is 2 letters + 3+ digits
+            paren_groups = re.findall(r'\(([^)]+)\)', ingredient_str)
+            
+            code = None
+            amount_desc = None
+            
+            # Find the group that contains a TKPI code (2 letters + 3+ digits)
+            for group in paren_groups:
+                if re.search(r'[A-Z]{2}\d{3,}', group):
+                    # This group likely contains the code
+                    parts = group.split(',', 1)  # Split on first comma
+                    if len(parts) == 2:
+                        code_part = parts[0].strip()
+                        amount_desc = parts[1].strip()
+                        
+                        # Extract just the code (2 letters + 3+ digits)
+                        code_match = re.search(r'([A-Z]{2}\d{3,})', code_part)
+                        if code_match:
+                            code = code_match.group(1)
+                            break
+            
+            if not code or not amount_desc:
                 print(f"[WARNING] Could not parse ingredient: {ingredient_str}")
+                continue
+            
+            # Step 2: Extract numeric amount from the description
+            # Handle cases like: "3 sdm atau 45g", "40 ml", "1/2 buah", etc.
+            # Prefer the last number (often the gram measurement) or the first if only one
+            amount_matches = list(re.finditer(r'(\d+(?:\.\d+)?)', amount_desc))
+            if not amount_matches:
+                print(f"[WARNING] Could not find numeric amount in: {amount_desc}")
+                continue
+            
+            try:
+                # Use the last number found (often more specific, like 45g instead of 3 sdm)
+                amount_str = amount_matches[-1].group(1)
+                amount = float(amount_str)
+            except (ValueError, IndexError):
+                print(f"[WARNING] Could not parse amount from: {amount_desc}")
+                continue
+            
+            # Step 3: Extract unit (g, ml, sdt, sdm, etc.) - look after the last number
+            unit_match = re.search(r'\d+(?:\.\d+)?\s*([a-zA-Z]*)', amount_desc)
+            unit = unit_match.group(1).strip().lower() if unit_match else ''
+            
+            # Step 4: Convert amount to grams if needed (assume ml = g for simplicity)
+            if unit == 'ml':
+                amount = amount  # 1 ml ~ 1 g for food
+            elif unit == 'g' or unit == '':  # Empty unit means grams
+                amount = amount
+            else:
+                # If other units, assume it's in grams
+                amount = amount
+            
+            # Step 5: Look up in TKPI data
+            if code in tkpi_data:
+                item = tkpi_data[code]
+                
+                # Get nutritional values per 100g from TKPI-2020.json format
+                kcal_per_100g = float(item.get('ENERGI (Kal)', 0))
+                prot_per_100g = float(item.get('PROTEIN (g)', 0))
+                fat_per_100g = float(item.get('LEMAK (g)', 0))
+                carb_per_100g = float(item.get('KH (g)', 0))
+                
+                # Calculate nutrition based on the amount used
+                # Formula: (value per 100g) * (amount in grams) / 100
+                total_energy += (kcal_per_100g * amount) / 100
+                total_protein += (prot_per_100g * amount) / 100
+                total_fat += (fat_per_100g * amount) / 100
+                total_carbs += (carb_per_100g * amount) / 100
+            else:
+                print(f"[WARNING] Ingredient code '{code}' not found in TKPI data")
         
         return {
             "energy_kcal": round(total_energy, 1),

@@ -1,51 +1,60 @@
-FROM python:3.10-slim
+#-------------------------------------------------------------------
+# STAGE 1: The "Builder"
+#
+# This stage installs system tools and ALL Python packages into a
+# virtual environment. This entire stage will be cached.
+#-------------------------------------------------------------------
+FROM python:3.10-slim as builder
 
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
+# Install system dependencies needed for building packages
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Set pip timeout and other configurations
+# Set pip configurations
 ENV PIP_DEFAULT_TIMEOUT=100
 ENV PIP_TIMEOUT=100
 ENV PIP_RETRIES=3
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Create a virtual environment
+ENV VIRTUAL_ENV=/opt/venv
+RUN python -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Install FastAPI dependencies first
-RUN pip install --no-cache-dir --default-timeout=100 -r requirements.txt
+# Copy ONLY the requirements file (from fastapi_app subfolder)
+COPY fastapi_app/requirements.txt .
 
-# Install core dependencies separately to handle timeouts
-RUN pip install --no-cache-dir --default-timeout=100 google-generativeai python-dotenv requests
+# Install all dependencies into the venv
+# This is the slow step that will be cached
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install LangChain dependencies separately
-RUN pip install --no-cache-dir --default-timeout=100 langchain-community
 
-# Install sentence transformers and chroma separately
-RUN pip install --no-cache-dir --default-timeout=100 sentence-transformers
+#-------------------------------------------------------------------
+# STAGE 2: The "Final" Image
+#
+# This stage is clean. It just copies the virtual env from the
+# builder and your application code. It's fast and small.
+#-------------------------------------------------------------------
+FROM python:3.10-slim as final
 
-# Install chromadb separately
-RUN pip install --no-cache-dir --default-timeout=100 chromadb
+WORKDIR /app
 
-# Install langchain-huggingface and langchain-chroma
-RUN pip install --no-cache-dir --default-timeout=100 langchain-huggingface langchain-chroma
+# Copy the virtual environment from the builder stage
+COPY --from=builder /opt/venv /opt/venv
 
-# Copy the entire project structure to maintain all dependencies
-COPY . .
+# Copy your application code
+COPY fastapi_app/ ./fastapi_app/
+COPY dataset/ /dataset/
+COPY rag-system/query.py ./
 
-# Set working directory to fastapi_app
-WORKDIR /app/fastapi_app
-
-# Expose port 8000
-EXPOSE 8000
-
-# Set environment variables
+# Set paths to use the venv
+ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH=/app
 
-# Run the application
+# Set the final working directory
+WORKDIR /app/fastapi_app
+
+# Expose port and run
+EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
