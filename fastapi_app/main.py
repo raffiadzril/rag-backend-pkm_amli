@@ -5,8 +5,15 @@ import os
 import sys
 
 # Add the rag-system path to import the query module
-# sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'rag-system'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'rag-system'))
+# The repo layout has `rag-system` as a sibling of `fastapi_app`, so resolve the parent
+import pathlib
+rag_system_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'rag-system'))
+if not os.path.isdir(rag_system_path):
+    # Fallback: try repo root rag-system (if running from repo root)
+    rag_system_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'rag-system'))
+    
+sys.path.insert(0, rag_system_path)
+print(f"[DEBUG] Added rag-system to sys.path: {rag_system_path}")
 
 # Import only the Gemini RAG service
 try:
