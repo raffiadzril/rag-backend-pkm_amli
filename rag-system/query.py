@@ -39,7 +39,7 @@ except Exception as e:
 api_key = os.getenv("GOOGLE_API_KEY") # Use GOOGLE_API_KEY as primary name
 gemini_model = None
 # Use gemini-2.5-pro for stable performance
-gemini_model_name = 'gemini-2.5-flash'
+gemini_model_name = 'gemini-2.5-pro'
 
 if api_key:
     try:
@@ -424,7 +424,7 @@ class ChromaRAGService:
         # Pass baby information to the enhanced search function for hybrid search
         konteks_aturan = self.search_relevant_docs(
             context_query, 
-            top_k=15,
+            top_k=7,
             umur_bulan=age_months,
             jenis_kelamin=jenis_kelamin,
             berat_badan=berat_badan,
@@ -490,7 +490,7 @@ class ChromaRAGService:
 }'''
         
         # Build prompt using the ORIGINAL format (string-based ingredients)
-        prompt = f"""Kamu adalah AI perencana menu MPASI bayi yang SANGAT TELITI dan KREATIF.
+        prompt = f"""Kamu adalah AI perencana menu MPASI bayi yang SANGAT TELITI, KREATIF, dan TAAT ATURAN GIZI NASIONAL.
 
 INFORMASI BAYI:
 - Usia: {age_months} bulan
@@ -507,47 +507,79 @@ KONTEKS ATURAN MPASI DAN AKG (WAJIB DIIKUTI DARI CHROMA DB)
 ==============================================
 DATA BAHAN MAKANAN (TKPI-COMPACT LINES):
 ==============================================
-[!] FILE TKPI_COMPACT.txt telah DILAMPIRKAN. Gunakan data dari file ini sebagai SATU-SATUNYA sumber informasi bahan makanan (name, code, kcal, prot_g, fat_g, carb_g, iron_mg, bdd_percent).
+[!] FILE TKPI_COMPACT.txt telah DILAMPIRKAN. Gunakan data dari file ini sebagai SATU-SATUNYA sumber informasi bahan makanan 
+(name, code, kcal, prot_g, fat_g, carb_g, iron_mg, bdd_percent).
 
 ==============================================
 TUGAS ANDA: BUAT RENCANA MENU MPASI ORIGINAL UNTUK 1 HARI
 ==============================================
 
 LANGKAH-LANGKAH WAJIB:
-1. ANALISIS ATURAN: 
-- Pastikan menu memenuhi syarat **ADEKUAT** dan **TEPAT WAKTU**.
-- WAJIB memenuhi kriteria **MINIMUM KERAGAMAN MAKANAN (MKM)** dan **KONSUMSI TELUR, IKAN, DAGING (TID)**.
-- WAJIB membatasi **GULA/GARAM** sesuai aturan dari KONTEKS ATURAN.
 
-2. PILIH BAHAN DARI FILE TKPI: 
-- GUNAKAN HANYA bahan yang ada di FILE `TKPI_COMPACT.txt` yang dilampirkan.
-- WAJIB sertakan **Nama Bahan**, **KODE TKPI**, dan **Jumlah (gram/ml)** untuk setiap bahan dalam format *string* seperti contoh: `"Nama Bahan (KODE, jumlah)"`.
+1. ANALISIS ATURAN:
+- Pastikan menu memenuhi syarat **ADEKUAT**, **TEPAT WAKTU**, **MKM (Minimum Keragaman Makanan)**, dan **TID (Telur, Ikan, Daging)**.
+- Batasi **GULA/GARAM** sesuai pedoman dari KONTEKS ATURAN.
+
+2. SESUAIKAN DENGAN TEMPAT TINGGAL:
+- Gunakan lokasi `{tempat_tinggal}` untuk menyesuaikan bahan makanan utama.
+    - Jika *pegunungan*, utamakan bahan lokal untuk bahan yang mudah ditemukan di daerah pegunungan jangan sampai ada ikan air laut
+    - Jika *pesisir pantai*, utamakan bahan laut seperti ikan segar, udang, rumput laut, dan buah tropis.
+- Kamu boleh menggunakan bahan umum jika bahan khas daerah tidak mencukupi kebutuhan gizi, tetapi **prioritaskan bahan lokal lebih dulu.**
+
+3. PILIH BAHAN DARI FILE TKPI:
+- GUNAKAN HANYA bahan yang ada di FILE `TKPI_COMPACT.txt`.
+- WAJIB sertakan **Nama Bahan**, **KODE TKPI**, dan **Jumlah (gram/ml ATAU takaran rumah tangga)**.
+- Gunakan satuan praktis seperti:
+  - `sdm` (sendok makan)
+  - `sdt` (sendok teh)
+  - `butir`, `iris`, `potong`, `lembar`, `gelas`, atau `ml`
+  - Contoh format: `"Ikan kembung (TKPI123, 1 ekor sedang)"` atau `"Minyak kelapa (TKPI045, 1 sdt)"`.
 - Hindari bahan alergen: {', '.join(allergies) if allergies else 'tidak ada'}.
 
-3. BUAT MENU ORIGINAL SESUAI ATURAN:
-- Buat kombinasi menu yang **KREATIF** (BUKAN menyalin template).
-- **ANALISIS ATURAN KONTEKS (WAJIB DIPATUHI):**
-    - **NUTRISI:** Targetkan total kalori harian agar mendekati **"Kebutuhan Jumlah Energi dari MP-ASI"** (cth: "200 kkal") yang ditemukan di KONTEKS ATURAN.
-    - **TEKSTUR & PORSI:** Pastikan **"Konsistensi / Tekstur"** (cth: "bubur kental", "dicincang halus") dan **"Jumlah Setiap Kali Makan"** (cth: "125 ml") SANGAT SESUAI dengan usia {age_months} bulan.
-    - **FREKUENSI:** Patuhi aturan **"Frekuensi"** (cth: "Utama: 2-3x, Selingan: 1-2x").
-        - Gunakan pemetaan ini: `Utama` = (`breakfast`, `lunch`, `dinner`) dan `Selingan` = (`morning_snack`, `afternoon_snack`).
-        - **PENTING:** Jika aturan frekuensi adalah "Utama: 2-3x", buatkan 2 atau 3 menu utama. Jika "Selingan: 1-2x", buatkan 1 atau 2 menu selingan. Anda yang memutuskan jumlah pastinya (misal, 3 utama dan 1 selingan) agar total nutrisi harian paling mendekati target.
+4. BUAT MENU ORIGINAL SESUAI ATURAN:
+- Menu harus **KREATIF** (bukan hasil salinan template).
+- Analisis konteks dari ATURAN untuk memastikan kepatuhan terhadap:
+    - **NUTRISI:** 
+        - Targetkan total kalori harian agar **TIDAK KURANG** dari nilai “Kebutuhan Jumlah Energi dari MP-ASI” 
+          yang ditemukan di konteks aturan (misalnya: 200 kkal, 300 kkal, dst).
+        - Menu boleh sedikit melebihi target (hingga ±10%), tetapi **TIDAK BOLEH KURANG** dari nilai tersebut.
+    - **TEKSTUR & PORSI:** Sesuaikan dengan usia {age_months} bulan 
+      (misalnya "bubur kental", "dicincang halus", "125 ml per kali makan").
+    - **FREKUENSI:** Patuhi aturan frekuensi dari konteks:
+        - `Utama` = (`breakfast`, `lunch`, `dinner`)
+        - `Selingan` = (`morning_snack`, `afternoon_snack`)
+        - Contoh: jika aturan adalah "Utama: 2-3x" dan "Selingan: 1-2x", 
+          kamu boleh memilih 3 utama dan 1 selingan agar total energi mendekati kebutuhan harian.
 
-4. KALKULASI NUTRISI:
-- Sistem akan MENGHITUNG MANUAL nutrisi setelah menerima menu dari Anda berdasarkan data dari FILE TKPI.
-- ANDA TIDAK PERLU MENGHITUNG nilai nutrisi secara akurat, hanya menyediakan informasi bahan dan jumlahnya.
-- Fokus pada kreativitas dan kepatuhan terhadap aturan MPASI.
+5. KALKULASI & VALIDASI INTERNAL:
+- Kamu tidak perlu menghitung nutrisi secara numerik, 
+  tapi WAJIB memastikan bahwa secara *perkiraan bahan* menu tidak menghasilkan total energi di bawah kebutuhan harian.
+- Jika menu tampak kurang kalori, tambahkan bahan sumber energi sehat (misalnya karbohidrat, lemak sehat, santan, atau minyak kelapa)
+  agar mendekati atau sedikit melebihi kebutuhan.
 
-5. VALIDASI & FORMAT:
-- Output HARUS JSON VALID sesuai format contoh di bawah.
-- Nilai nutrisi dapat diisi sementara, karena akan dihitung ulang secara manual oleh sistem.
+6. FORMAT OUTPUT (WAJIB JSON VALID):
+- Output HARUS dalam format JSON VALID sesuai contoh.
+- Nutrisi hanya diisi sementara (placeholder), karena sistem akan menghitung ulang berdasarkan file TKPI.
+- Pastikan struktur JSON identik dengan contoh berikut:
 
-LARANGAN KETAT:
-❌ JANGAN gunakan bahan APAPUN yang tidak ada di FILE `TKPI_COMPACT.txt`.
-❌ JANGAN gunakan format objek untuk ingredients — gunakan STRING seperti contoh.
-
-FORMAT RESPONSE (JSON VALID - COPY STRUKTUR INI PERSIS):
 {json_example_original}
+
+==============================================
+❗ LARANGAN KETAT:
+❌ JANGAN gunakan bahan apapun yang tidak ada di FILE `TKPI_COMPACT.txt`.
+❌ JANGAN gunakan format objek untuk ingredients — gunakan STRING seperti contoh.
+❌ JANGAN hasilkan total energi yang kurang dari kebutuhan harian yang tercantum di KONTEKS ATURAN.
+❌ JANGAN abaikan konteks tempat tinggal dalam memilih bahan makanan.
+
+📋 CATATAN PENTING:
+Sebelum memberikan hasil akhir, lakukan pemeriksaan internal:
+- Apakah total energi >= kebutuhan minimal dari “Kebutuhan Jumlah Energi dari MP-ASI”? 
+  Jika belum, tambahkan bahan yang sesuai (misal: karbohidrat, minyak, kacang, daging).
+- Apakah bahan-bahan sesuai konteks tempat tinggal `{tempat_tinggal}`?
+- Pastikan kombinasi bahan tetap sesuai prinsip MPASI dan tidak melanggar pembatasan gula/garam.
+
+Hasil akhir harus berupa JSON valid berisi menu 1 hari penuh yang MEMENUHI atau SEDIKIT MELEBIHI kebutuhan kalori dan 
+MENGGUNAKAN BAHAN LOKAL yang sesuai dengan daerah tempat tinggal bayi.
 """
 
         # Extra instruction to avoid list-wrapping or markdown fences in model output
