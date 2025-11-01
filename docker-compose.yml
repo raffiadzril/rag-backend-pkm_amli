@@ -13,7 +13,10 @@ services:
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - PYTHONPATH=/app
-    # Volume mounts removed — all needed files are copied into the image during build
+    # Chroma DB is baked into the image (COPY in Dockerfile). No host
+    # bind-mount is configured for the service; the baked-in DB will be used
+    # at runtime. If you want to use a host directory instead, re-add a
+    # bind-mount under `volumes:` pointing to ./rag-system/chroma_db.
     networks:
       - mpasi-network
     restart: unless-stopped

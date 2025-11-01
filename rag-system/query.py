@@ -39,7 +39,7 @@ except Exception as e:
 api_key = os.getenv("GOOGLE_API_KEY") # Use GOOGLE_API_KEY as primary name
 gemini_model = None
 # Use gemini-2.5-pro for stable performance
-gemini_model_name = 'gemini-2.5-flash'
+gemini_model_name = 'gemini-2.5-pro'
 
 if api_key:
     try:
@@ -272,6 +272,55 @@ class ChromaRAGService:
         
         # Filter out empty sub-queries and return
         return [q for q in sub_queries if q.strip()]
+
+
+    def _try_generate_with_model(self, model_name, inputs, generation_config):
+        """Attempt a single generate_content call with the given model name.
+        Returns the response on success. On exception, raises the exception to the caller.
+        """
+        try:
+            print(f"  [INFO] Trying Gemini model: {model_name}")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(inputs, generation_config=generation_config)
+            print(f"  [INFO] Model {model_name} returned a response")
+            return response, model_name
+        except Exception as e:
+            # Re-raise for the caller to inspect and decide whether to fallback
+            print(f"  [WARNING] Model {model_name} raised an exception: {e}")
+            raise
+
+
+    def _call_gemini_with_fallback(self, inputs, generation_config, model_priority=None):
+        """Call Gemini with an ordered list of models and fallback on quota/limit errors.
+
+        model_priority: list of model names in preferred order. If None, defaults to
+                        ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'].
+
+        Returns: (response, used_model_name)
+        Raises Exception if all models fail or a non-quota error occurs.
+        """
+        if model_priority is None:
+            model_priority = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash']
+
+        last_exception = None
+        for mname in model_priority:
+            try:
+                resp, used = self._try_generate_with_model(mname, inputs, generation_config)
+                return resp, used
+            except Exception as e:
+                last_exception = e
+                msg = str(e).lower()
+                # Detect quota/limit/rate-limit style errors and continue to fallback
+                if any(tok in msg for tok in ['quota', 'rate limit', 'rate_limit', '429', 'exhausted', 'resourceexhausted']):
+                    print(f"  [INFO] Model {mname} appears limited/quota-exhausted. Falling back to next model.")
+                    continue
+                else:
+                    # For other errors, raise immediately so caller can inspect
+                    print(f"  [ERROR] Non-quota error from model {mname}: {e}")
+                    raise
+
+        # If we exhausted the list, raise the last exception
+        raise last_exception if last_exception is not None else Exception("All Gemini models failed without exception details")
 
 
     def transform_query_age_only(self, umur_bulan=None):
@@ -606,16 +655,18 @@ MENGGUNAKAN BAHAN LOKAL yang sesuai dengan daerah tempat tinggal bayi.
             print(f"  [DEBUG] Contents being sent to API: [{type(prompt)}, {type(tkpi_file_ref)}]")
             print(f"  [DEBUG] Prompt type: {type(prompt)}, File ref type: {type(tkpi_file_ref)}")
             
-            print("  [INFO] Calling Gemini API generate_content... (with JSON mode)")
-            # Attempt the API call with JSON mode
-            response = self.gemini_model.generate_content(
-                [prompt, tkpi_file_ref],
-                generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json",
-                    temperature=0.3,
-                )
+            print("  [INFO] Calling Gemini API generate_content... (with JSON mode) using fallback wrapper")
+            # Attempt the API call with JSON mode and fallback across models
+            generation_conf = genai.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.3,
             )
-            print("  [SUCCESS] Gemini API call (JSON mode) completed successfully.")
+            try:
+                response, used_model_name = self._call_gemini_with_fallback([prompt, tkpi_file_ref], generation_conf)
+                print(f"  [SUCCESS] Gemini API call completed successfully with model: {used_model_name}")
+            except Exception as e:
+                print(f"  [ERROR] All Gemini models failed: {e}")
+                raise
 
             # --- Error Checking for Response ---
             print("  [INFO] Checking response candidates...")
@@ -671,22 +722,16 @@ MENGGUNAKAN BAHAN LOKAL yang sesuai dengan daerah tempat tinggal bayi.
             # Calculate nutrition based on ingredients if available in the menu data
             calculated_menu_data = self.calculate_nutrition_for_menu(menu_data)
             
+            # used_model_name should have been set by the fallback wrapper; fall back to model attribute if not
+            model_used_for_generation = locals().get('used_model_name', getattr(self, 'gemini_model', None).model_name if getattr(self, 'gemini_model', None) else None)
             return {
                 "status": "success",
                 "data": calculated_menu_data,
                 "rag_info": {
                     "documents_retrieved": len(konteks_aturan),
                     "retrieval_source": "ChromaDB (MPASI rules) + Gemini File API (TKPI data)",
-                    "generation_model": "gemini-2.5-flash",
+                    "generation_model": model_used_for_generation,
                     "baby_age": age_months
-                },
-                "debug_info": {
-                    "prompt": prompt,
-                    "prompt_length": len(prompt),
-                    "search_query": context_query,
-                    "retrieval_queries": getattr(self, 'last_retrieval_queries', []),
-                    "retrieval_query_used": getattr(self, 'last_retrieval_query', None),
-                    "normalized_input": normalized_input
                 }
             }
         except Exception as e:

@@ -47,6 +47,10 @@ COPY --from=builder /opt/venv /opt/venv
 COPY fastapi_app/ ./fastapi_app/
 COPY dataset/ /dataset/
 COPY rag-system/query.py ./
+# Copy the ChromaDB files from rag-system into the runtime image so the app
+# can use the prebuilt index at runtime. This places the DB at
+# /app/fastapi_app/chroma_db which matches db_path='./chroma_db' used by the app.
+COPY rag-system/chroma_db ./fastapi_app/chroma_db
 
 # Set paths to use the venv
 ENV PATH="/opt/venv/bin:$PATH"

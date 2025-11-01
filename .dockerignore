@@ -25,6 +25,13 @@
 # Databases
 **/chroma_db
 
+# Allow the baked chroma DB located in the repository under rag-system/
+# so that Docker can COPY it into the image when requested. Keep the
+# general exclusion above to avoid other chroma_db directories leaking
+# into the build context.
+!rag-system/chroma_db
+!rag-system/chroma_db/**
+
 # Output
 **/dist
 **/build
