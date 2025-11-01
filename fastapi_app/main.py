@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import os
@@ -31,6 +32,15 @@ app = FastAPI(
     title="MPASI Menu Generator API",
     description="API for generating MPASI (Pendamping ASI) menus for babies",
     version="1.0.0"
+)
+
+# Allow all CORS (development / permissive)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize RAG services

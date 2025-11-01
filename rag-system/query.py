@@ -39,7 +39,7 @@ except Exception as e:
 api_key = os.getenv("GOOGLE_API_KEY") # Use GOOGLE_API_KEY as primary name
 gemini_model = None
 # Use gemini-2.5-pro for stable performance
-gemini_model_name = 'gemini-2.5-pro'
+gemini_model_name = 'gemini-2.5-flash'
 
 if api_key:
     try:
