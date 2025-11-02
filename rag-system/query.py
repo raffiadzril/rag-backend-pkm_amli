@@ -637,6 +637,15 @@ MENGGUNAKAN BAHAN LOKAL yang sesuai dengan daerah tempat tinggal bayi.
 """
 
         # Extra instruction to avoid list-wrapping or markdown fences in model output
+        # Instruction: include household measures AND gram/ml equivalent
+        prompt += (
+            "\n\nPENTING (TAKARAN DAN EKUIVALEN): Saat Anda menuliskan daftar ingredients, "
+            "sertakan takaran rumah tangga agar mudah dimengerti oleh pembaca DAN sertakan ekuivalen gram atau ml sebagai nilai terakhir di dalam tanda kurung, "
+            "dipisahkan dengan '/' atau ' / '. Contoh: 'Beras giling mentah (AR001, 3 sdm / 30g)' atau 'Santan (KP003, 1 sdm / 15g)'. "
+            "Sistem akan menggunakan nilai gram/ml terakhir (angka terakhir di dalam tanda kurung) untuk perhitungan nutrisi."
+        )
+
+        # Extra instruction to avoid list-wrapping or markdown fences in model output
         prompt += (
             "\n\nPENTING: KEMBALIKAN HANYA SATU OBJEK JSON VALID (TIDAK DALAM BENTUK ARRAY). "
             "JANGAN sertakan teks penjelasan, markdown fences (```), atau output tambahan di luar JSON. "
