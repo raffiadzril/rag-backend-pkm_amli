@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import os
 import sys
@@ -16,6 +16,11 @@ if not os.path.isdir(rag_system_path):
 sys.path.insert(0, rag_system_path)
 print(f"[DEBUG] Added rag-system to sys.path: {rag_system_path}")
 
+# Add chatbot path
+chatbot_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'chatbot'))
+sys.path.insert(0, chatbot_path)
+print(f"[DEBUG] Added chatbot to sys.path: {chatbot_path}")
+
 # Import only the Gemini RAG service
 try:
     from query import get_chroma_rag_service
@@ -28,9 +33,21 @@ except ImportError as e:
     get_chroma_rag_service = None
     GEMINI_IMPORT_SUCCESS = False
 
+# Import chatbot service
+try:
+    from chatbot_service import get_chatbot_service
+    print("✓ Successfully imported chatbot_service module")
+    CHATBOT_IMPORT_SUCCESS = True
+except ImportError as e:
+    print(f"✗ Error importing chatbot service: {e}")
+    import traceback
+    print(f"Traceback: {traceback.format_exc()}")
+    get_chatbot_service = None
+    CHATBOT_IMPORT_SUCCESS = False
+
 app = FastAPI(
-    title="MPASI Menu Generator API",
-    description="API for generating MPASI (Pendamping ASI) menus for babies",
+    title="GATA MPASI Backend API",
+    description="API untuk Menu Generation dan Chatbot MPASI",
     version="1.0.0"
 )
 
@@ -63,7 +80,24 @@ else:
 RAG_READY = GEMINI_READY
 print(f"RAG Ready Status: {RAG_READY} (GEMINI_READY: {GEMINI_READY}, GEMINI_IMPORT_SUCCESS: {GEMINI_IMPORT_SUCCESS})")
 
-# Pydantic models for request/response
+# Initialize Chatbot service
+CHATBOT_READY = False
+
+if CHATBOT_IMPORT_SUCCESS:
+    try:
+        print("Attempting to initialize Chatbot service...")
+        chatbot_service = get_chatbot_service()
+        CHATBOT_READY = True
+        print("✓ Successfully initialized Chatbot service")
+    except Exception as e:
+        print(f"✗ Error initializing Chatbot service: {e}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
+        CHATBOT_READY = False
+else:
+    print("✗ Chatbot service not available due to import error")
+
+# Pydantic models for Menu Generation
 class MenuGenerationRequest(BaseModel):
     umur_bulan: int
     berat_badan: float
@@ -74,9 +108,54 @@ class MenuGenerationRequest(BaseModel):
     model_type: str = "gemini"  # 'gemini' or 'lm_studio'
     model_name: Optional[str] = None
 
+
+# Pydantic models for Chatbot
+class ChatMessage(BaseModel):
+    sender: str = Field(..., description="user or bot")
+    text: str = Field(..., description="Message content")
+    timestamp: Optional[str] = None
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., description="User message")
+    conversation_history: Optional[List[ChatMessage]] = Field(
+        default_factory=list,
+        description="Conversation history"
+    )
+
+
+class ChatResponse(BaseModel):
+    response: str
+    status: str
+    sources_used: int
+    has_context: bool
+
 @app.get("/")
 def read_root():
-    return {"message": "MPASI Menu Generator API", "status": "running"}
+    """Root endpoint dengan info API"""
+    return {
+        "service": "GATA MPASI Backend API",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "menu_generation": {
+                "generate": "/api/generate-menu (POST)",
+                "status": "/api/status (GET)",
+                "models": "/api/models (GET)",
+                "debug": "/api/debug-prompt (POST)"
+            },
+            "chatbot": {
+                "chat": "/api/chatbot/chat (POST)",
+                "status": "/api/chatbot/status (GET)",
+                "test": "/api/chatbot/test (GET)"
+            },
+            "docs": "/docs (Swagger UI)"
+        },
+        "services": {
+            "menu_generation": "ready" if GEMINI_READY else "unavailable",
+            "chatbot": "ready" if CHATBOT_READY else "unavailable"
+        }
+    }
 
 @app.get("/api/status")
 def get_status():
@@ -85,7 +164,8 @@ def get_status():
         "status": "online",
         "services": {
             "chromadb": "ready",
-            "gemini": "ready" if GEMINI_READY else "unavailable"
+            "gemini": "ready" if GEMINI_READY else "unavailable",
+            "chatbot": "ready" if CHATBOT_READY else "unavailable"
         }
     }
 
@@ -157,6 +237,118 @@ def debug_prompt(request: MenuGenerationRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating debug prompt: {str(e)}")
+
+
+# ========================================
+# CHATBOT ENDPOINTS
+# ========================================
+
+@app.post("/api/chatbot/chat", response_model=dict)
+async def chatbot_chat(request: ChatRequest = Body(...)):
+    """
+    Chat dengan asisten gizi MPASI
+    
+    Request body:
+    {
+        "message": "Kapan harus mulai MPASI?",
+        "conversation_history": [
+            {"sender": "user", "text": "halo"},
+            {"sender": "bot", "text": "halo juga"}
+        ]
+    }
+    
+    Response:
+    {
+        "status": "success",
+        "response": "Jawaban dari bot...",
+        "sources_used": 3,
+        "has_context": true
+    }
+    """
+    try:
+        if not CHATBOT_READY:
+            raise HTTPException(
+                status_code=503, 
+                detail="Chatbot service not available"
+            )
+        
+        chatbot = get_chatbot_service()
+        
+        # Convert conversation history to dict
+        history = [
+            {"sender": msg.sender, "text": msg.text}
+            for msg in request.conversation_history
+        ] if request.conversation_history else []
+        
+        result = chatbot.generate_response(
+            user_message=request.message,
+            conversation_history=history
+        )
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error in chatbot: {str(e)}"
+        )
+
+
+@app.get("/api/chatbot/status")
+async def chatbot_status():
+    """Check chatbot service status"""
+    try:
+        if not CHATBOT_READY:
+            return {
+                "status": "unavailable",
+                "service": "GATA Chatbot Service",
+                "ready": False,
+                "error": "Chatbot service not initialized"
+            }
+        
+        chatbot = get_chatbot_service()
+        return {
+            "status": "ok",
+            "service": "GATA Chatbot Service",
+            "knowledge_base_size": len(chatbot.knowledge_base),
+            "ready": True
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "service": "GATA Chatbot Service",
+            "error": str(e),
+            "ready": False
+        }
+
+
+@app.get("/api/chatbot/test")
+async def chatbot_test():
+    """Test endpoint untuk memastikan chatbot berfungsi"""
+    try:
+        if not CHATBOT_READY:
+            return {
+                "status": "error",
+                "message": "Chatbot service not available"
+            }
+        
+        chatbot = get_chatbot_service()
+        
+        test_message = "Kapan bayi boleh mulai MPASI?"
+        result = chatbot.generate_response(test_message)
+        
+        return {
+            "test_message": test_message,
+            "result": result,
+            "timestamp": "test"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 
 if __name__ == "__main__":
     import uvicorn

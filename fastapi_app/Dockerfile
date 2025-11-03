@@ -47,6 +47,8 @@ COPY --from=builder /opt/venv /opt/venv
 COPY fastapi_app/ ./fastapi_app/
 COPY dataset/ /dataset/
 COPY rag-system/query.py ./
+# Copy chatbot service (for integrated chatbot in main.py)
+COPY chatbot/ ./chatbot/
 # Copy the ChromaDB files from rag-system into the runtime image so the app
 # can use the prebuilt index at runtime. This places the DB at
 # /app/fastapi_app/chroma_db which matches db_path='./chroma_db' used by the app.
