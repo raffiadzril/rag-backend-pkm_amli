@@ -21,6 +21,10 @@ chatbot_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'ch
 sys.path.insert(0, chatbot_path)
 print(f"[DEBUG] Added chatbot to sys.path: {chatbot_path}")
 
+# Memory management and cleanup
+import gc
+import torch
+
 # Import only the Gemini RAG service
 try:
     from query import get_chroma_rag_service
@@ -308,10 +312,13 @@ async def chatbot_status():
             }
         
         chatbot = get_chatbot_service()
+        # Test retrieval to confirm service is working
+        test_docs = chatbot.search_relevant_context("test", top_k=1)
+        
         return {
             "status": "ok",
             "service": "GATA Chatbot Service",
-            "knowledge_base_size": len(chatbot.knowledge_base),
+            "rag_service": "connected",
             "ready": True
         }
     except Exception as e:
@@ -349,6 +356,47 @@ async def chatbot_test():
             "message": str(e)
         }
 
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup resources on application shutdown"""
+    global rag_service_gemini, chatbot_service
+    print("\nShutting down FastAPI application...")
+    
+    # Clean up RAG service
+    if GEMINI_READY and rag_service_gemini:
+        try:
+            print("Cleaning up RAG service...")
+            # Clear embeddings from memory
+            if hasattr(rag_service_gemini, 'embeddings'):
+                if hasattr(rag_service_gemini.embeddings, 'client'):
+                    rag_service_gemini.embeddings.client = None
+            
+            # Clean up vector store
+            if hasattr(rag_service_gemini, 'vectordb'):
+                rag_service_gemini.vectordb = None
+            
+            rag_service_gemini = None
+            print("✓ RAG service cleanup completed")
+        except Exception as e:
+            print(f"✗ Error during RAG service cleanup: {e}")
+    
+    # Clean up chatbot service
+    if CHATBOT_READY and chatbot_service:
+        try:
+            print("Cleaning up Chatbot service...")
+            chatbot_service.model = None
+            chatbot_service.rag_service = None
+            chatbot_service = None
+            print("✓ Chatbot service cleanup completed")
+        except Exception as e:
+            print(f"✗ Error during Chatbot service cleanup: {e}")
+    
+    # Force garbage collection
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    print("✓ Memory cleanup completed")
 
 if __name__ == "__main__":
     import uvicorn

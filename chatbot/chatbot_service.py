@@ -5,6 +5,8 @@ Menggunakan RAG (Retrieval Augmented Generation) untuk menjawab pertanyaan tenta
 
 import os
 import json
+import gc
+import torch
 import google.generativeai as genai
 from dotenv import load_dotenv
 from pathlib import Path
@@ -12,225 +14,67 @@ from pathlib import Path
 load_dotenv()
 
 class ChatbotService:
-    def __init__(self, dataset_dir="../dataset"):
-        """Initialize Chatbot dengan Gemini API dan RAG system"""
-        self.api_key = os.getenv("GEMINI_API_KEY")
+    def __init__(self):
+        """Initialize Chatbot that uses only the project's Chroma RAG service for retrieval.
+
+        This class no longer attempts to load a local `dataset/` folder. It requires the
+        `get_chroma_rag_service()` factory from the project's `query` module to be available
+        (i.e. `rag-system` must be on sys.path and its Chroma DB accessible). If the RAG
+        service cannot be imported or initialized, initialization will fail fast with an
+        exception so the deployment clearly indicates the missing dependency.
+        """
+        # Add proper cleanup handling
+        import gc
+        import torch
+        import atexit
+        
+        # Register cleanup on Python exit
+        atexit.register(self.cleanup)
+        # Prefer the project-wide name GOOGLE_API_KEY but accept GEMINI_API_KEY for backward compatibility
+        self.api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
-            raise ValueError("GEMINI_API_KEY tidak ditemukan di .env")
-        
+            raise ValueError("GOOGLE_API_KEY atau GEMINI_API_KEY tidak ditemukan di .env (set GOOGLE_API_KEY preferred)")
+
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
-        self.dataset_dir = Path(dataset_dir)
-        self.knowledge_base = []
-        
-        self.load_knowledge_base()
-    
-    def load_knowledge_base(self):
-        """Load knowledge base dari dataset dengan parsing yang lebih baik"""
-        if not self.dataset_dir.exists():
-            print(f"⚠️ Dataset folder tidak ditemukan: {self.dataset_dir}")
-            return
-        
-        print("📚 Loading knowledge base...")
-        
-        # Load JSON files
-        json_files = list(self.dataset_dir.glob("*.json"))
-        print(f"📄 Found {len(json_files)} JSON files")
-        
-        for json_file in json_files:
-            try:
-                with open(json_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    
-                    # Add metadata untuk tracking
-                    if isinstance(data, list):
-                        for item in data:
-                            if isinstance(item, dict):
-                                item['_source_file'] = json_file.name
-                        self.knowledge_base.extend(data)
-                        print(f"  ✓ {json_file.name}: {len(data)} items")
-                    else:
-                        if isinstance(data, dict):
-                            data['_source_file'] = json_file.name
-                        self.knowledge_base.append(data)
-                        print(f"  ✓ {json_file.name}: 1 item")
-            except Exception as e:
-                print(f"  ✗ Error loading {json_file.name}: {e}")
-        
-        # Load Markdown files - parse into sections untuk retrieval lebih baik
-        md_files = list(self.dataset_dir.glob("*.md"))
-        print(f"📝 Found {len(md_files)} Markdown files")
-        
-        for md_file in md_files:
-            try:
-                with open(md_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    
-                    # Parse markdown into sections berdasarkan header
-                    sections = self._parse_markdown_sections(content, md_file.name)
-                    
-                    if sections:
-                        self.knowledge_base.extend(sections)
-                        print(f"  ✓ {md_file.name}: {len(sections)} sections")
-                    else:
-                        # Jika tidak ada section, load sebagai satu dokumen utuh
-                        self.knowledge_base.append({
-                            "source": md_file.name,
-                            "content": content,
-                            "type": "markdown",
-                            "_source_file": md_file.name
-                        })
-                        print(f"  ✓ {md_file.name}: 1 document")
-            except Exception as e:
-                print(f"  ✗ Error loading {md_file.name}: {e}")
-        
-        # Load TXT files jika ada
-        txt_files = list(self.dataset_dir.glob("*.txt"))
-        if txt_files:
-            print(f"📄 Found {len(txt_files)} TXT files")
-            for txt_file in txt_files:
-                try:
-                    with open(txt_file, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        self.knowledge_base.append({
-                            "source": txt_file.name,
-                            "content": content,
-                            "type": "text",
-                            "_source_file": txt_file.name
-                        })
-                    print(f"  ✓ {txt_file.name}")
-                except Exception as e:
-                    print(f"  ✗ Error loading {txt_file.name}: {e}")
-        
-        print(f"\n✅ Total knowledge base loaded: {len(self.knowledge_base)} documents")
-        print(f"📊 Ready to answer questions!\n")
-    
-    def _parse_markdown_sections(self, content: str, filename: str):
-        """Parse markdown content menjadi sections berdasarkan headers"""
-        sections = []
-        lines = content.split('\n')
-        current_section = {
-            "source": filename,
-            "type": "markdown",
-            "_source_file": filename,
-            "header": "",
-            "content": ""
-        }
-        
-        for line in lines:
-            # Detect headers (# Header atau ## Header, etc)
-            if line.strip().startswith('#'):
-                # Save previous section jika ada content
-                if current_section["content"].strip():
-                    sections.append(current_section.copy())
-                
-                # Start new section
-                header_level = len(line) - len(line.lstrip('#'))
-                header_text = line.lstrip('#').strip()
-                
-                current_section = {
-                    "source": filename,
-                    "type": "markdown",
-                    "_source_file": filename,
-                    "header": header_text,
-                    "header_level": header_level,
-                    "content": line + "\n"
-                }
-            else:
-                current_section["content"] += line + "\n"
-        
-        # Add last section
-        if current_section["content"].strip():
-            sections.append(current_section)
-        
-        return sections
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
+
+        # Require and use the project's Chroma RAG service exclusively
+        try:
+            from query import get_chroma_rag_service
+        except Exception as e:
+            raise RuntimeError(f"Chatbot requires rag-system on sys.path but 'query.get_chroma_rag_service' could not be imported: {e}")
+
+        try:
+            self.rag_service = get_chroma_rag_service()
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Chroma RAG service: {e}")
+
+        # Confirm service appears usable
+        try:
+            # some rag services expose a doc count or similar attribute; use search with empty query to sanity check
+            docs = self.rag_service.search_relevant_docs("test", top_k=1)
+            print(f"✓ Chatbot: connected to Chroma RAG service (sample retrieval returned {len(docs)} docs)")
+        except Exception as e:
+            raise RuntimeError(f"Chroma RAG service initialized but sample retrieval failed: {e}")
     
     def search_relevant_context(self, query: str, top_k: int = 10):
-        """Cari konteks yang relevan dari knowledge base dengan scoring yang lebih pintar"""
-        query_lower = query.lower()
-        query_words = [w for w in query_lower.split() if len(w) > 2]  # Filter kata pendek
-        
-        # Keywords untuk topik spesifik
-        topic_keywords = {
-            'mpasi': ['mpasi', 'makanan pendamping asi', 'makanan bayi'],
-            'aturan': ['aturan', 'prinsip', 'panduan', 'syarat'],
-            'menu': ['menu', 'resep', 'makanan', 'bahan'],
-            'gizi': ['gizi', 'nutrisi', 'kalori', 'protein', 'karbohidrat', 'lemak', 'vitamin'],
-            'akg': ['akg', 'angka kecukupan gizi', 'kebutuhan gizi'],
-            'tekstur': ['tekstur', 'lumat', 'lembut', 'kental', 'cincang'],
-            'usia': ['bulan', 'usia', 'umur', 'tahap'],
-            'alergi': ['alergi', 'intoleransi', 'pantangan', 'hindari'],
-            'porsi': ['porsi', 'takaran', 'jumlah', 'banyak'],
-            'frekuensi': ['frekuensi', 'jadwal', 'kali', 'sehari'],
-        }
-        
-        # Deteksi topik dari query
-        detected_topics = []
-        for topic, keywords in topic_keywords.items():
-            if any(kw in query_lower for kw in keywords):
-                detected_topics.append(topic)
-        
-        scored_docs = []
-        for doc in self.knowledge_base:
-            score = 0
-            doc_text = str(doc).lower()
-            
-            # Exact phrase match - skor tertinggi
-            if query_lower in doc_text:
-                score += 200
-            
-            # Topic relevance - boost jika dokumen cocok dengan topik yang terdeteksi
-            for topic in detected_topics:
-                topic_words = topic_keywords[topic]
-                matches = sum(1 for kw in topic_words if kw in doc_text)
-                if matches > 0:
-                    score += matches * 15
-            
-            # Individual word matching dengan konteks
-            for word in query_words:
-                # Exact word match
-                if f" {word} " in f" {doc_text} ":
-                    score += 20
-                # Partial word match
-                elif word in doc_text:
-                    score += 10
-                # Fuzzy match (kata mirip)
-                else:
-                    for doc_word in doc_text.split():
-                        if word in doc_word or doc_word in word:
-                            if len(word) > 3 and len(doc_word) > 3:
-                                score += 5
-                                break
-            
-            # Boost untuk dokumen yang memiliki banyak keyword match
-            matching_words = sum(1 for word in query_words if word in doc_text)
-            if matching_words > 0:
-                score += matching_words * 8
-                # Bonus jika hampir semua kata ada
-                if matching_words >= len(query_words) * 0.7:
-                    score += 50
-            
-            # Boost untuk markdown content (biasanya lebih terstruktur)
-            if isinstance(doc, dict) and doc.get("type") == "markdown":
-                score = int(score * 1.2)
-            
-            if score > 0:
-                scored_docs.append((score, doc))
-        
-        # Sort by score and return top K
-        scored_docs.sort(reverse=True, key=lambda x: x[0])
-        
-        # Fallback: jika skor tertinggi terlalu rendah, coba cari lagi dengan topik umum
-        if not scored_docs or scored_docs[0][0] < 30:
-            print(f"⚠️ Low confidence results, adding general MPASI docs")
-            for doc in self.knowledge_base:
-                doc_text = str(doc).lower()
-                if any(kw in doc_text for kw in ['mpasi', 'bayi', 'anak', 'gizi']):
-                    # Cek apakah sudah ada
-                    if doc not in [d for _, d in scored_docs]:
-                        scored_docs.append((10, doc))
-        
-        return [doc for score, doc in scored_docs[:top_k]]
+        """Return relevant context using the Chroma RAG service exclusively.
+
+        This method assumes the ChatbotService was initialized successfully and
+        `self.rag_service` is available.
+        """
+        try:
+            docs = self.rag_service.search_relevant_docs(query, top_k=top_k)
+            print(f"✓ Chatbot: Retrieved {len(docs)} docs from Chroma RAG for query")
+            return docs
+        except Exception as e:
+            # Fail-fast: if retrieval fails at runtime, surface an error so the
+            # deployment operator notices. Returning an empty list could hide issues.
+            raise RuntimeError(f"Chroma RAG retrieval error: {e}")
+
+    # The old in-memory dataset loading and keyword search were intentionally
+    # removed. This ChatbotService relies solely on the project's Chroma RAG
+    # service for retrieval.
     
     def generate_response(self, user_message: str, conversation_history: list = None):
         """Generate response menggunakan RAG dan Gemini"""
@@ -439,6 +283,37 @@ Sekarang jawab pertanyaan user dengan FORMAT RAPI, LENGKAP, dan INFORMATIF sesua
             }
 
 
+    def cleanup(self):
+        """Clean up resources and memory"""
+        try:
+            print("Cleaning up ChatbotService resources...")
+            # Clear Gemini model
+            if hasattr(self, 'model'):
+                self.model = None
+            
+            # Clean up RAG service
+            if hasattr(self, 'rag_service'):
+                if hasattr(self.rag_service, 'embeddings'):
+                    if hasattr(self.rag_service.embeddings, 'client'):
+                        self.rag_service.embeddings.client = None
+                if hasattr(self.rag_service, 'vectordb'):
+                    self.rag_service.vectordb = None
+                self.rag_service = None
+            
+            # Force garbage collection
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            print("✓ ChatbotService cleanup completed")
+        except Exception as e:
+            print(f"✗ Error during ChatbotService cleanup: {e}")
+
+    def __del__(self):
+        """Destructor to ensure cleanup when object is deleted"""
+        self.cleanup()
+
+
 # Singleton instance
 _chatbot_service = None
 
@@ -446,5 +321,7 @@ def get_chatbot_service():
     """Get or create chatbot service singleton"""
     global _chatbot_service
     if _chatbot_service is None:
-        _chatbot_service = ChatbotService(dataset_dir="../dataset")
+        # Docker / production: ChatbotService no longer accepts a dataset_dir.
+        # It requires the project's Chroma RAG service to be available on sys.path.
+        _chatbot_service = ChatbotService()
     return _chatbot_service

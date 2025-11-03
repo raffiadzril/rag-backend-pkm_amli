@@ -10,9 +10,25 @@ services:
         - PIP_DEFAULT_TIMEOUT=300
     ports:
       - "8000:8000"
+    # Memory and CPU limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # Maximum memory limit
+          cpus: '1.0'  # Maximum CPU usage (1 core)
+        reservations:
+          memory: 1G  # Minimum memory reservation
+    
+    # Environment variables and memory management settings
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - MALLOC_TRIM_THRESHOLD_=100000
+      - MALLOC_MMAP_THRESHOLD_=1000000
+      # Add Gunicorn settings for memory optimization
+      - GUNICORN_CMD_ARGS="--workers=2 --threads=4 --worker-class=uvicorn.workers.UvicornWorker --max-requests=1000 --max-requests-jitter=50"
+    
     # Chroma DB is baked into the image (COPY in Dockerfile). No host
     # bind-mount is configured for the service; the baked-in DB will be used
     # at runtime. If you want to use a host directory instead, re-add a
@@ -20,6 +36,7 @@ services:
     networks:
       - mpasi-network
     restart: unless-stopped
+    
     # Add health check to ensure service is ready
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/status"]

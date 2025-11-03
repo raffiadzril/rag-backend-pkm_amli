@@ -4,32 +4,71 @@ import time
 import google.generativeai as genai
 from dotenv import load_dotenv
 # Import local embedding model
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+import gc
+import torch
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
 import traceback # Added for detailed error traceback
 # Use CrossEncoder for reranking (required)
 from sentence_transformers import CrossEncoder
+from chromadb.config import Settings
 
 load_dotenv()
+
+# ============================================================================
+# MEMORY OPTIMIZATION SETTINGS
+# ============================================================================
+
+# ChromaDB client settings for better memory management
+CHROMA_SETTINGS = Settings(
+    anonymized_telemetry=False,
+    is_persistent=True,
+    persist_directory='./chroma_db'
+)
+
+# Memory optimization: clear CUDA cache if available
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
 
 # ============================================================================
 # INITIALIZE CHROMADB AND GEMINI
 # ============================================================================
 
 db_path = './chroma_db'
-# Use BGE embeddings for improved semantic density
-embedding_model_name = "BAAI/bge-large-en-v1.5"
+# Use BGE-small for reduced memory footprint
+embedding_model_name = "BAAI/bge-small-en-v1.5"
 print(f"Initializing local embedding model ({embedding_model_name})...")
 embeddings = HuggingFaceEmbeddings(
-    model_name=embedding_model_name
+    model_name=embedding_model_name,
+    model_kwargs={
+        'device': 'cpu',  # Force CPU to control memory usage
+        'trust_remote_code': True
+    },
+    encode_kwargs={
+        'normalize_embeddings': True,  # Improves quality while keeping memory same
+        'batch_size': 32  # Smaller batch size for less memory
+    }
 )
 
 # Load ChromaDB (Assume successful indexing via store.py)
 try:
+    # Clear any existing CUDA cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        print("[INFO] Cleared CUDA cache before loading ChromaDB")
+    
+    # Initialize ChromaDB with memory-optimized settings
     vectordb = Chroma(
         persist_directory=db_path,
-        embedding_function=embeddings
+        embedding_function=embeddings,
+        client_settings=CHROMA_SETTINGS
     )
+    
+    # Force garbage collection after loading
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
     print(f"[SUCCESS] ChromaDB loaded successfully with {vectordb._collection.count()} documents")
 except Exception as e:
     print(f"[ERROR] Error loading ChromaDB from {db_path}: {e}")
